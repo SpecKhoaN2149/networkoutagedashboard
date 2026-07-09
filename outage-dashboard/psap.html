@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spectrum — PSAP / 911 Status</title>
+
+    <!-- Shared dashboard styles (PSAP-page styles live here too) -->
+    <link rel="stylesheet" href="styles.css?v=6" />
+    <!-- Theme init (applied before paint to avoid a flash of the wrong theme) -->
+    <script src="theme.js?v=6"></script>
+  </head>
+  <body>
+    <div class="app app--page">
+      <!-- Header consistent with the dashboard -->
+      <header class="header" id="header">
+        <div class="header__brand">
+          <h1 class="header__title">
+            <span class="brand-spectrum">Spectrum</span>
+          </h1>
+          <span class="header__subtitle">PSAP / 911 Status</span>
+        </div>
+        <div class="header__meta">
+          <a class="header__nav-link" href="index.html?v=6">&larr; Back to dashboard</a>
+          <div class="header__updated">
+            Last updated:
+            <span class="header__updated-value" id="last-updated">—</span>
+          </div>
+          <button class="theme-toggle" id="theme-toggle" type="button" title="Toggle light / dark theme" aria-label="Toggle light / dark theme">🌙</button>
+        </div>
+      </header>
+
+      <!-- Summary counts by status -->
+      <section class="psap-summary" id="psap-summary" aria-label="PSAP status summary">
+        <!-- Summary tiles injected by psapPage.js -->
+      </section>
+
+      <!-- Per-column filters live in the table's filter row (below the header).
+           The summary tiles above reflect ALL PSAPs; the per-column filters
+           narrow only the table. This slim bar just hosts the live count. -->
+      <div class="filter-bar" id="psap-filter" role="group" aria-label="Filter PSAPs">
+        <span class="filter-bar__label">Filter each column below</span>
+        <span class="filter-bar__spacer"></span>
+        <span class="filter-bar__count" id="psap-filter-count" aria-live="polite"></span>
+      </div>
+
+      <!-- Full PSAP table -->
+      <div class="panel psap-table-panel">
+        <div class="panel__header">
+          <h2 class="panel__title">All PSAPs — 911 reporting status</h2>
+        </div>
+        <div class="panel__body">
+          <div class="psap-table-wrap" id="psap-table">
+            <!-- PSAP table injected by psapPage.js -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         Scripts (no Leaflet needed on this page). Plain <script> tags,
+         no ES module imports.
+         ============================================================ -->
+    <script src="constants.js?v=6"></script>
+    <script src="infoTip.js?v=6"></script>
+    <script src="mockData.js?v=6"></script>
+    <script src="psapData.js?v=6"></script>
+    <script src="filters.js?v=6"></script>
+    <script src="header.js?v=6"></script>
+    <script src="psapPage.js?v=6"></script>
+  </body>
+</html>

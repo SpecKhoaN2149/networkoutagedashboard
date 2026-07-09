@@ -1,0 +1,651 @@
+/*
+ * map.js — Map Renderer for the Spectrum + Cox outage dashboard mockup.
+ *
+ * Initializes the Leaflet map, frames the continental United States with
+ * OpenStreetMap tiles, and (in later tasks) renders/updates outage bubbles and
+ * popups. This file currently implements ONLY `initMap` (task 9.1); bubble
+ * rendering (`renderOutages` / `updateOutages`) is added by task 10.1 and will
+ * extend the same `window.MapRenderer` api object.
+ *
+ * Buildless / browser-only: loaded via a plain <script> tag AFTER
+ * `lib/leaflet.js`, so Leaflet is available as the browser global `L`. This
+ * module reads `L` from the global scope and MUST NOT `require("leaflet")` —
+ * it is DOM/browser-only and is intentionally not imported by the Node/Vitest
+ * suite. It attaches its exports to `window.MapRenderer`. Shared US bounds come
+ * from `window.DashboardConstants`.
+ */
+(function (global) {
+  "use strict";
+
+  // Shared constants (continental US bounding box). Browser global is expected;
+  // a Node require fallback is provided only for constants (never Leaflet).
+  var C = global.DashboardConstants;
+  if (!C && typeof require !== "undefined") {
+    C = require("./constants");
+  }
+
+  // Bubble encoding scales (browser globals). These are DOM-adjacent siblings
+  // loaded via <script> before map.js; no Node fallback is needed because
+  // map.js is never imported by the Node/Vitest suite.
+  var SizeScale = global.SizeScale;
+  var ColorScale = global.ColorScale;
+
+  var US_BOUNDS = C.US_BOUNDS; // { latMin:24, latMax:50, lngMin:-125, lngMax:-66 }
+
+  // Optional selection callback invoked with an outage when its bubble is
+  // clicked. Wired by app.js via setSelectHandler so clicking a bubble can
+  // drive the right-hand detail panel.
+  var selectHandler = null;
+
+  /**
+   * Registers a callback invoked with the outage record when its bubble is
+   * clicked. Passing null clears the handler.
+   * @param {Function|null} fn
+   */
+  function setSelectHandler(fn) {
+    selectHandler = typeof fn === "function" ? fn : null;
+  }
+
+  // Bubble styling constants. Fill color/radius come from the encoding scales;
+  // the stroke is a subtle darker border so overlapping bubbles stay legible.
+  var BUBBLE_FILL_OPACITY = 0.72;
+  var BUBBLE_STROKE_COLOR = "#7a2b0b";
+  var BUBBLE_STROKE_WEIGHT = 1;
+  var BUBBLE_STROKE_OPACITY = 0.9;
+
+  // Standard OpenStreetMap raster tile endpoint + required attribution.
+  var OSM_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+  var OSM_ATTRIBUTION =
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+  // Fallback center/zoom framing the lower 48 states (Requirement 5.1). Used if
+  // fitBounds cannot be applied (e.g. container has no measurable size yet).
+  var US_CENTER = [39.5, -98.35];
+  var US_ZOOM = 4;
+
+  // Tile-failure handling (Requirements 13.4, 14.1). The notice element lives
+  // in index.html; showing it adds `is-visible` (CSS flips display:none->flex).
+  // If the base tiles have not finished loading within this window — or any
+  // tile errors (e.g. no network) — we treat the imagery as unavailable and
+  // reveal the notice while bubbles/overlays keep rendering over the neutral
+  // (CSS dark) base layer.
+  var TILES_NOTICE_ID = "tiles-unavailable";
+  var TILE_LOAD_TIMEOUT_MS = 10000;
+
+  /**
+   * Toggles the "map tiles unavailable" notice. Robust to a missing element or
+   * a missing document (headless) so it never throws and never blocks the rest
+   * of the dashboard from rendering (Requirement 14.2).
+   *
+   * @param {boolean} visible - true to reveal the notice, false to hide it.
+   */
+  function toggleTilesNotice(visible) {
+    if (typeof document === "undefined" || !document.getElementById) {
+      return;
+    }
+    var notice = document.getElementById(TILES_NOTICE_ID);
+    if (!notice || !notice.classList) {
+      return;
+    }
+    if (visible) {
+      notice.classList.add("is-visible");
+    } else {
+      notice.classList.remove("is-visible");
+    }
+  }
+
+  /**
+   * Wires tile-failure detection for a freshly-initialized map (Req 13.4,
+   * 14.1). Two independent signals reveal the notice:
+   *   - a `tileerror` event on the tile layer (a tile could not be fetched,
+   *     e.g. offline), and
+   *   - a 10-second timeout that fires if the layer never reports `load`
+   *     (all visible tiles loaded) — covering silent stalls.
+   * A successful `load` clears the timeout and hides the notice, so if tiles
+   * do eventually arrive the dashboard recovers cleanly. Bubbles and overlays
+   * are never removed here — only the notice is toggled.
+   *
+   * @param {Object} mapHandle - handle whose `tileLayer` to observe.
+   */
+  function setupTileFailureDetection(mapHandle) {
+    if (!mapHandle || !mapHandle.tileLayer) {
+      return;
+    }
+    var tileLayer = mapHandle.tileLayer;
+    var settled = false; // ensures we only clear the timeout / hide once
+
+    // Start hidden; only the failure signals below reveal the notice.
+    toggleTilesNotice(false);
+
+    var timeoutId = null;
+    if (typeof setTimeout === "function") {
+      timeoutId = setTimeout(function () {
+        if (settled) {
+          return;
+        }
+        // Tiles never reported a successful load in time -> unavailable.
+        toggleTilesNotice(true);
+      }, TILE_LOAD_TIMEOUT_MS);
+    }
+    mapHandle.tilesTimeoutId = timeoutId;
+
+    // Any tile that fails to fetch marks the base imagery unavailable.
+    tileLayer.on("tileerror", function () {
+      toggleTilesNotice(true);
+    });
+
+    // All visible tiles loaded -> imagery is available; stand down the timer
+    // and hide the notice (recovery path if tiles arrive after an error).
+    tileLayer.on("load", function () {
+      settled = true;
+      if (timeoutId !== null && typeof clearTimeout === "function") {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+        mapHandle.tilesTimeoutId = null;
+      }
+      toggleTilesNotice(false);
+    });
+  }
+
+  /**
+   * Initializes the Leaflet map on the given container and frames the
+   * continental United States (Requirements 5.1, 13.3).
+   *
+   * Behavior:
+   *   - Creates an `L.map` on `containerId`.
+   *   - Adds an OpenStreetMap raster tile layer with proper attribution.
+   *   - Sets the initial view so the continental US bounding box
+   *     (lat 24–50 N, lng 125–66 W) is fully contained in the viewport via
+   *     `fitBounds`, with a center ~39.5 N / -98.35 W, zoom ~4 fallback.
+   *
+   * @param {string} containerId - id of the map container element.
+   * @returns {Object} MapHandle wrapping the Leaflet map + tile layer, which
+   *   later tasks (10.1) use to render and update outage bubbles.
+   */
+  function initMap(containerId) {
+    if (typeof L === "undefined") {
+      throw new Error(
+        "Leaflet (L) is not available — ensure lib/leaflet.js is loaded before map.js"
+      );
+    }
+
+    // Create the map. worldCopyJump keeps markers sane when panning across the
+    // antimeridian; not critical for a US-framed view but harmless.
+    var map = L.map(containerId, {
+      worldCopyJump: true,
+    });
+
+    // Add the OpenStreetMap base tile layer with required attribution.
+    var tileLayer = L.tileLayer(OSM_TILE_URL, {
+      attribution: OSM_ATTRIBUTION,
+      maxZoom: 19,
+    });
+    tileLayer.addTo(map);
+
+    // Frame the continental US so the whole bounding box is visible.
+    // L.latLngBounds takes [[southWest], [northEast]] = [[latMin,lngMin],[latMax,lngMax]].
+    var usBounds = L.latLngBounds([
+      [US_BOUNDS.latMin, US_BOUNDS.lngMin],
+      [US_BOUNDS.latMax, US_BOUNDS.lngMax],
+    ]);
+
+    // fitBounds guarantees the box is fully contained in the viewport. If it
+    // cannot be applied (e.g. zero-size container during headless init), fall
+    // back to an explicit center/zoom that frames the lower 48 (Req 5.1).
+    try {
+      map.fitBounds(usBounds);
+      // Ensure a view is always set even if fitBounds no-ops on a 0-size box.
+      if (map.getZoom() === undefined || map.getZoom() === null) {
+        map.setView(US_CENTER, US_ZOOM);
+      }
+    } catch (e) {
+      map.setView(US_CENTER, US_ZOOM);
+    }
+
+    // MapHandle: wraps the Leaflet map plus the tile layer and framing bounds
+    // so later tasks (10.1 render/update, 17.1 tile-failure handling) have the
+    // references they need. `map` is the raw L.map instance.
+    var mapHandle = {
+      map: map,
+      tileLayer: tileLayer,
+      usBounds: usBounds,
+      // Bubble layer group placeholder for task 10.1 to populate.
+      bubbleLayers: {},
+    };
+
+    // Tile-failure detection: reveal the "tiles unavailable" notice on a
+    // tileerror or after a 10s load timeout, keeping bubbles/overlays visible
+    // over the neutral base layer (Requirements 13.4, 14.1, 14.2).
+    setupTileFailureDetection(mapHandle);
+
+    // The map flexes to fill available height, which can change without a
+    // window resize (e.g. the FCC alert banner appearing/disappearing grows or
+    // shrinks the map panel). Observe the container and ask Leaflet to
+    // recompute its size so tiles always fill the panel. Debounced via
+    // requestAnimationFrame to avoid resize-loop churn.
+    if (typeof ResizeObserver !== "undefined" && typeof document !== "undefined") {
+      var containerEl = document.getElementById(containerId);
+      if (containerEl) {
+        var pending = false;
+        var ro = new ResizeObserver(function () {
+          if (pending) {
+            return;
+          }
+          pending = true;
+          var raf =
+            typeof requestAnimationFrame !== "undefined"
+              ? requestAnimationFrame
+              : function (cb) {
+                  return setTimeout(cb, 16);
+                };
+          raf(function () {
+            pending = false;
+            if (mapHandle.map && mapHandle.map.invalidateSize) {
+              mapHandle.map.invalidateSize({ animate: false });
+            }
+          });
+        });
+        ro.observe(containerEl);
+        mapHandle.resizeObserver = ro;
+      }
+    }
+
+    return mapHandle;
+  }
+
+  // --- Bubble rendering helpers (task 10.1) -------------------------------
+
+  /**
+   * Resolves the bubble radius for an outage from the shared Size Scale
+   * (growth rate -> radius). Falls back to the min radius bound if the scale
+   * global is somehow unavailable so rendering never throws.
+   */
+  function radiusFor(outage) {
+    if (SizeScale && typeof SizeScale.radiusForGrowthRate === "function") {
+      return SizeScale.radiusForGrowthRate(outage.growthRatePerMin);
+    }
+    return C.RADIUS_BOUNDS.min;
+  }
+
+  /**
+   * Resolves the bubble fill color for an outage from the shared Color Scale
+   * (current lost users -> color). Falls back to the coldest heat-ramp stop if
+   * the scale global is unavailable.
+   */
+  function colorFor(outage) {
+    if (ColorScale && typeof ColorScale.colorForLostUsers === "function") {
+      return ColorScale.colorForLostUsers(outage.currentLostUsers);
+    }
+    return C.HEAT_RAMP_STOPS[0].color;
+  }
+
+  /**
+   * Formats an integer-ish number with thousands separators for display in the
+   * popup (e.g. 48200 -> "48,200"). Non-finite values render as "—".
+   */
+  function formatNumber(value) {
+    if (typeof value !== "number" || !isFinite(value)) {
+      return "\u2014";
+    }
+    return Math.round(value).toLocaleString("en-US");
+  }
+
+  /**
+   * Formats an ISO 8601 timestamp as a readable local date/time for the popup.
+   * Invalid/missing values render as "—".
+   */
+  function formatStartTime(startedAt) {
+    if (!startedAt) {
+      return "\u2014";
+    }
+    var d = new Date(startedAt);
+    if (isNaN(d.getTime())) {
+      return "\u2014";
+    }
+    return d.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  /**
+   * Escapes a string for safe insertion into popup HTML. Mock data is trusted,
+   * but escaping keeps the renderer robust if a name/region contains markup.
+   */
+  function escapeHtml(str) {
+    if (str === undefined || str === null) {
+      return "";
+    }
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  /**
+   * Builds the popup HTML for an outage, using the .outage-popup* CSS classes
+   * defined in styles.css. Shows name, region, network, current lost users,
+   * growth rate (users/min), severity, and start time (Requirement 1.3).
+   */
+  function popupHtml(outage) {
+    function row(key, val) {
+      return (
+        '<div class="outage-popup__row">' +
+        '<span class="outage-popup__key">' +
+        escapeHtml(key) +
+        "</span>" +
+        '<span class="outage-popup__val">' +
+        escapeHtml(val) +
+        "</span>" +
+        "</div>"
+      );
+    }
+
+    var reportable = C.isReportable
+      ? C.isReportable(outage)
+      : outage && outage.currentLostUsers >= 900000;
+    var reportableBanner = reportable
+      ? '<div class="outage-popup__flag">\u26A0 FCC REPORTABLE (\u2265 900k)</div>'
+      : "";
+
+    return (
+      '<div class="outage-popup">' +
+      '<div class="outage-popup__title">' +
+      escapeHtml(outage.name) +
+      "</div>" +
+      reportableBanner +
+      row("Region", outage.region) +
+      row("Network", outage.network) +
+      row("Lost users", formatNumber(outage.currentLostUsers)) +
+      row("Growth", formatNumber(outage.growthRatePerMin) + " users/min") +
+      row("Severity", outage.severity) +
+      row("Started", formatStartTime(outage.startedAt)) +
+      "</div>"
+    );
+  }
+
+  /**
+   * Ensures the MapHandle has a Leaflet layer group to hold bubbles and a map
+   * to track markers by outage id. Returns the layer group. Idempotent.
+   */
+  function ensureBubbleGroup(mapHandle) {
+    if (!mapHandle.bubbleGroup) {
+      mapHandle.bubbleGroup = L.layerGroup().addTo(mapHandle.map);
+    }
+    if (!mapHandle.bubbleLayers) {
+      mapHandle.bubbleLayers = {};
+    }
+    return mapHandle.bubbleGroup;
+  }
+
+  /**
+   * Creates a single circle-marker bubble for an outage, wires its popup and
+   * the hover-open / pointer-off-close interactions, and registers it on the
+   * MapHandle by outage id. Assumes the outage's coordinates are already valid.
+   */
+  /**
+   * Returns true when the outage has crossed the FCC/911 reporting threshold.
+   */
+  function reportableFor(outage) {
+    return C.isReportable
+      ? C.isReportable(outage)
+      : !!outage && outage.currentLostUsers >= 900000;
+  }
+
+  /**
+   * Toggles the pulsing "reportable" ring on a marker's SVG path element by
+   * adding/removing the `bubble--reportable` class. Guarded so it is a no-op
+   * when the path element is not present (e.g. under a stubbed Leaflet in tests
+   * or before the marker is added to the DOM).
+   */
+  function applyReportableState(marker, outage) {
+    var path = marker && marker._path;
+    if (!path || !path.classList) {
+      return;
+    }
+    if (reportableFor(outage)) {
+      path.classList.add("bubble--reportable");
+    } else {
+      path.classList.remove("bubble--reportable");
+    }
+  }
+
+  function createBubble(mapHandle, group, outage) {
+    var marker = L.circleMarker([outage.lat, outage.lng], {
+      radius: radiusFor(outage),
+      fillColor: colorFor(outage),
+      fillOpacity: BUBBLE_FILL_OPACITY,
+      color: BUBBLE_STROKE_COLOR,
+      weight: BUBBLE_STROKE_WEIGHT,
+      opacity: BUBBLE_STROKE_OPACITY,
+      className: reportableFor(outage) ? "bubble--reportable" : "",
+    });
+
+    marker.bindPopup(popupHtml(outage), {
+      className: "outage-popup-wrapper",
+      closeButton: true,
+    });
+
+    // Hover opens the popup; moving the pointer off closes it, leaving the
+    // bubble in place (Requirement 1.4). Click toggles for touch/keyboard use.
+    marker.on("mouseover", function () {
+      marker.openPopup();
+    });
+    marker.on("mouseout", function () {
+      marker.closePopup();
+    });
+    marker.on("click", function () {
+      // Primary action: select this outage so the detail panel updates.
+      if (selectHandler) {
+        try {
+          selectHandler(outage);
+        } catch (e) {
+          /* never let a handler error break map interaction */
+        }
+      }
+      // Secondary: keep the popup toggle for a quick on-map summary.
+      if (marker.isPopupOpen && marker.isPopupOpen()) {
+        marker.closePopup();
+      } else {
+        marker.openPopup();
+      }
+    });
+
+    // Stash the outage on the marker so filter/visibility logic can read it
+    // without another lookup, and so a hidden-then-shown marker keeps its data.
+    marker.__outage = outage;
+
+    group.addLayer(marker);
+    mapHandle.bubbleLayers[outage.id] = marker;
+    return marker;
+  }
+
+  /**
+   * Renders one bubble per VALID outage on the map (Requirements 1.1, 1.2,
+   * 1.3, 1.4, 14.5, 14.6).
+   *
+   * Behavior:
+   *   - Clears any previously rendered bubbles so a re-render is a clean redraw.
+   *   - For each outage whose coordinates pass `isValidCoordinate`, draws an
+   *     `L.circleMarker` at its lat/lng with radius from the Size Scale and
+   *     fill color from the Color Scale, and binds a details popup.
+   *   - Records with out-of-range coordinates are skipped (no bubble) while the
+   *     remaining valid records still render (Requirement 14.6).
+   *   - An empty list renders zero bubbles (Requirement 14.5).
+   *   - Markers are tracked by outage id on `mapHandle.bubbleLayers` so
+   *     `updateOutages` can mutate them in place.
+   *
+   * @param {Object} mapHandle - handle returned by `initMap`.
+   * @param {Array} outages - list of outage records.
+   */
+  function renderOutages(mapHandle, outages) {
+    if (!mapHandle || !mapHandle.map) {
+      return;
+    }
+    var group = ensureBubbleGroup(mapHandle);
+
+    // Clean redraw: remove existing bubbles and reset the id -> marker index.
+    group.clearLayers();
+    mapHandle.bubbleLayers = {};
+
+    var list = Array.isArray(outages) ? outages : [];
+    for (var i = 0; i < list.length; i++) {
+      var outage = list[i];
+      if (!outage || !C.isValidCoordinate(outage.lat, outage.lng)) {
+        // Skip out-of-range/invalid coordinates (Requirement 14.6).
+        continue;
+      }
+      createBubble(mapHandle, group, outage);
+    }
+  }
+
+  /**
+   * Updates existing bubbles in place from a new outage list, used by live
+   * drift so the map animates without a full teardown/rebuild (design:
+   * "update existing bubbles' radius/fillColor in place").
+   *
+   * For each outage:
+   *   - If a marker already exists for its id, mutates the radius via
+   *     `setRadius`, the fill color via `setStyle`, and refreshes popup content.
+   *   - If no marker exists yet (and coordinates are valid), creates one.
+   * Markers whose id is no longer present in the new list are removed.
+   *
+   * @param {Object} mapHandle - handle returned by `initMap`.
+   * @param {Array} outages - updated list of outage records.
+   */
+  function updateOutages(mapHandle, outages) {
+    if (!mapHandle || !mapHandle.map) {
+      return;
+    }
+    var group = ensureBubbleGroup(mapHandle);
+    var list = Array.isArray(outages) ? outages : [];
+
+    // Track which ids are present in the incoming list so stale markers can be
+    // pruned afterwards.
+    var seen = {};
+
+    for (var i = 0; i < list.length; i++) {
+      var outage = list[i];
+      if (!outage || !C.isValidCoordinate(outage.lat, outage.lng)) {
+        continue;
+      }
+      seen[outage.id] = true;
+      var marker = mapHandle.bubbleLayers[outage.id];
+      if (marker) {
+        // Keep the stashed outage current so visibility filtering (which reads
+        // marker.__outage) reflects the drifted values.
+        marker.__outage = outage;
+        // Mutate the existing bubble in place (radius + fill color).
+        marker.setRadius(radiusFor(outage));
+        marker.setStyle({ fillColor: colorFor(outage) });
+        // Toggle the pulsing reportable ring as the outage crosses 900k.
+        applyReportableState(marker, outage);
+        // Refresh popup content so details reflect the drifted values.
+        marker.setPopupContent(popupHtml(outage));
+      } else {
+        // New id not previously rendered — create it (robustness).
+        createBubble(mapHandle, group, outage);
+      }
+    }
+
+    // Remove markers for ids no longer present (robustness).
+    var ids = Object.keys(mapHandle.bubbleLayers);
+    for (var j = 0; j < ids.length; j++) {
+      var id = ids[j];
+      if (!seen[id]) {
+        group.removeLayer(mapHandle.bubbleLayers[id]);
+        delete mapHandle.bubbleLayers[id];
+      }
+    }
+  }
+
+  /**
+   * Shows only the bubbles whose outage id is in `allowedIds`, hiding the rest,
+   * WITHOUT destroying any markers. Markers are added to / removed from the
+   * bubble layer group but always kept in `mapHandle.bubbleLayers`, so live
+   * drift (`updateOutages`) can keep mutating them in place while hidden and
+   * they reappear with fresh values when they re-enter the filter.
+   *
+   * `allowedIds` may be a Set, an object used as a lookup map ({ id: true }),
+   * or an array of ids. A null/undefined value shows everything.
+   *
+   * @param {Object} mapHandle - handle returned by `initMap`.
+   * @param {Set<string>|Object|Array<string>|null} allowedIds
+   */
+  function applyVisibility(mapHandle, allowedIds) {
+    if (!mapHandle || !mapHandle.map) {
+      return;
+    }
+    var group = ensureBubbleGroup(mapHandle);
+
+    // Normalize the various accepted shapes into a predicate.
+    var isAllowed;
+    if (allowedIds == null) {
+      isAllowed = function () {
+        return true;
+      };
+    } else if (typeof allowedIds.has === "function") {
+      // Set
+      isAllowed = function (id) {
+        return allowedIds.has(id);
+      };
+    } else if (Array.isArray(allowedIds)) {
+      var lookup = {};
+      for (var k = 0; k < allowedIds.length; k++) {
+        lookup[allowedIds[k]] = true;
+      }
+      isAllowed = function (id) {
+        return !!lookup[id];
+      };
+    } else {
+      isAllowed = function (id) {
+        return !!allowedIds[id];
+      };
+    }
+
+    var ids = Object.keys(mapHandle.bubbleLayers);
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var marker = mapHandle.bubbleLayers[id];
+      if (!marker) {
+        continue;
+      }
+      var onMap = group.hasLayer ? group.hasLayer(marker) : true;
+      if (isAllowed(id)) {
+        if (!onMap) {
+          group.addLayer(marker);
+          // Re-apply the pulsing ring state now that it is back in the DOM.
+          applyReportableState(marker, marker.__outage);
+        }
+      } else if (onMap) {
+        group.removeLayer(marker);
+      }
+    }
+  }
+
+  var api = {
+    initMap: initMap,
+    renderOutages: renderOutages,
+    updateOutages: updateOutages,
+    // Toggle bubble visibility by allowed outage-id set WITHOUT destroying
+    // markers (shared filter drives this from app.js).
+    applyVisibility: applyVisibility,
+    // Register a callback invoked with the outage when its bubble is clicked
+    // (drives the detail panel in app.js).
+    setSelectHandler: setSelectHandler,
+    // Exposed so callers can force the tile-failure notice (e.g. when they
+    // detect connectivity issues out-of-band) or hide it after recovery.
+    setTilesUnavailable: toggleTilesNotice,
+  };
+
+  // Attach to the browser global so app.js (and later tasks) can use it.
+  global.MapRenderer = api;
+
+  // NOTE: intentionally NO dual-mode `module.exports` footer here. map.js is a
+  // browser/DOM-only module that depends on the Leaflet global `L`; it is not
+  // imported by the Node/Vitest suite, so exporting it would risk pulling
+  // Leaflet into a Node context that has no DOM.
+})(typeof window !== "undefined" ? window : this);

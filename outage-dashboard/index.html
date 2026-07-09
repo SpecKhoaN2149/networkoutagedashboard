@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spectrum — Outage Operations Dashboard</title>
+
+    <!-- Vendored Leaflet stylesheet (local copy, no CDN required) -->
+    <link rel="stylesheet" href="lib/leaflet.css" />
+    <!-- Dashboard styles: all layout + component classes defined up front -->
+    <link rel="stylesheet" href="styles.css?v=6" />
+    <!-- Theme init (applied before paint to avoid a flash of the wrong theme) -->
+    <script src="theme.js?v=6"></script>
+  </head>
+  <body>
+    <div class="app">
+      <!-- ============================================================
+           Header: unified branding, last-updated timestamp, live indicator
+           (rendered by header.js — task 15.1)
+           ============================================================ -->
+      <header class="header" id="header">
+        <div class="header__brand">
+          <h1 class="header__title">
+            <span class="brand-spectrum">Spectrum</span>
+          </h1>
+          <span class="header__subtitle">Outage Operations</span>
+        </div>
+        <div class="header__meta">
+          <a class="header__nav-link" href="psap.html?v=6">PSAP / 911 Status &rarr;</a>
+          <div class="header__updated">
+            Last updated:
+            <span class="header__updated-value" id="last-updated">—</span>
+          </div>
+          <div class="live-indicator is-active" id="live-indicator">
+            <span class="live-indicator__dot"></span>
+            <span class="live-indicator__label">Live</span>
+          </div>
+          <button class="theme-toggle" id="theme-toggle" type="button" title="Toggle light / dark theme" aria-label="Toggle light / dark theme">🌙</button>
+        </div>
+      </header>
+
+      <!-- ============================================================
+           FCC reportable alert banner — shown by app.js when one or more
+           outages cross the 900k FCC/911 reporting threshold. Clicking it
+           opens the FCC details modal.
+           ============================================================ -->
+      <div class="fcc-banner" id="fcc-banner" role="alert" hidden></div>
+
+      <!-- ============================================================
+           Shared filter bar — a slim full-width control strip that filters
+           BOTH the map bubbles and the outage table below (wired in app.js).
+           Severity select + FCC-reportable checkbox + free-text search.
+           ============================================================ -->
+      <div class="filter-bar" id="dashboard-filter" role="group" aria-label="Filter outages">
+        <div class="filter-bar__group">
+          <label class="filter-bar__label" for="filter-severity">Severity</label>
+          <select class="filter-bar__select" id="filter-severity">
+            <option value="all">All</option>
+            <option value="critical">Critical</option>
+            <option value="major">Major</option>
+            <option value="minor">Minor</option>
+          </select>
+        </div>
+        <label class="filter-bar__check">
+          <input type="checkbox" id="filter-reportable" />
+          FCC reportable only
+        </label>
+        <div class="filter-bar__group">
+          <label class="filter-bar__label" for="filter-search">Search</label>
+          <input
+            class="filter-bar__search"
+            id="filter-search"
+            type="search"
+            placeholder="Search name or region"
+            aria-label="Search outages by name or region"
+          />
+        </div>
+        <span class="filter-bar__spacer"></span>
+        <span class="filter-bar__count" id="filter-count" aria-live="polite"></span>
+      </div>
+
+      <!-- ============================================================
+           Main content stack: the map is the hero. A map row (map + detail
+           panel) fills most of the height, with the active outage table as a
+           full-width strip below it.
+           ============================================================ -->
+      <section class="main-stack">
+        <!-- Map row: Leaflet map (left, hero) + outage detail panel (right) -->
+        <div class="map-row">
+          <!-- Map panel with bubbles + legend overlay + tiles notice -->
+          <div class="panel map-panel">
+            <div id="map"></div>
+
+            <!-- Tiles-unavailable notice (toggled by map.js — task 17.1) -->
+            <div class="tiles-unavailable" id="tiles-unavailable" role="status">
+              <span class="tiles-unavailable__icon">&#9888;</span>
+              <span>Map tiles unavailable — showing outages over a blank base layer</span>
+            </div>
+
+            <!-- Legend overlay (rendered by legendView.js — task 11.1) -->
+            <div class="legend legend--overlay" id="legend" aria-label="Map legend">
+              <!-- Legend size samples + color gradient injected here -->
+            </div>
+          </div>
+
+          <!-- Outage detail panel (rendered by detailPanel.js) -->
+          <aside class="panel detail-panel-wrap" aria-label="Outage details">
+            <div class="panel__header">
+              <h2 class="panel__title">Outage details</h2>
+            </div>
+            <div class="panel__body">
+              <div id="detail-panel">
+                <!-- Detail content injected here (empty state on load) -->
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <!-- Active outage table — full-width strip below the map row -->
+        <div class="panel table-panel">
+          <div class="panel__header">
+            <h2 class="panel__title">Active outages</h2>
+          </div>
+          <div class="panel__body">
+            <div class="outage-table-wrap" id="outage-table">
+              <!-- Outage table rows injected here -->
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============================================================
+         FCC report details modal — opened by clicking the reportable alert
+         banner (wired in app.js; content rendered by reportModal.js).
+         ============================================================ -->
+    <div class="modal-overlay" id="fcc-modal" hidden>
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="fcc-modal-title"
+      >
+        <div class="modal__header">
+          <h2 class="modal__title" id="fcc-modal-title">
+            <span>&#9888;</span> FCC / 911 Reporting
+          </h2>
+          <button class="modal__close" id="fcc-modal-close" type="button" aria-label="Close">
+            &times;
+          </button>
+        </div>
+        <div class="modal__body" id="fcc-modal-body"></div>
+      </div>
+    </div>
+
+    <!-- ============================================================
+         Scripts, loaded via plain <script> tags in dependency order.
+         No ES module imports (which fail over file://). Each logic
+         module attaches to a browser global and is created by a later
+         task; app.js wires everything together last.
+         ============================================================ -->
+
+    <!-- Vendored Leaflet library (local copy, no CDN required) -->
+    <script src="lib/leaflet.js"></script>
+
+    <!-- Shared constants + validation helpers (task 1.1) -->
+    <script src="constants.js?v=6"></script>
+
+    <!-- Reusable info-tooltip helper (loaded before the view modules) -->
+    <script src="infoTip.js?v=6"></script>
+
+    <!-- Pure logic modules (tasks 2–7) -->
+    <script src="mockData.js?v=6"></script>
+    <script src="psapData.js?v=6"></script>
+    <script src="summary.js?v=6"></script>
+    <script src="sizeScale.js?v=6"></script>
+    <script src="colorScale.js?v=6"></script>
+    <script src="legend.js?v=6"></script>
+    <script src="drift.js?v=6"></script>
+    <script src="filters.js?v=6"></script>
+    <!-- Impact metric (line-minutes) for reportable outages -->
+    <script src="impact.js?v=6"></script>
+
+    <!-- Map + view/component modules (tasks 9–15) -->
+    <script src="map.js?v=6"></script>
+    <script src="legendView.js?v=6"></script>
+    <script src="outageTable.js?v=6"></script>
+    <script src="detailPanel.js?v=6"></script>
+    <script src="header.js?v=6"></script>
+    <script src="reportModal.js?v=6"></script>
+
+    <!-- Entry point — wires everything together + starts live drift (task 16) -->
+    <script src="app.js?v=6"></script>
+  </body>
+</html>

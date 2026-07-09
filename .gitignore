@@ -1,0 +1,13 @@
+# Dependencies (test tooling only — the app is buildless)
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs
+*.log
