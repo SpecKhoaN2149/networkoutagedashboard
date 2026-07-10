@@ -48,6 +48,19 @@
     "receipt; Notified = report sent, awaiting acknowledgement; Pending = " +
     "not yet reported; Not required = below the 900k FCC reporting threshold.";
 
+  // Per-status descriptions for the summary tiles' info "i".
+  var STATUS_TIP = {
+    acknowledged:
+      "The PSAP has confirmed receipt of the outage notification.",
+    notified:
+      "A report has been sent to the PSAP; awaiting their acknowledgement.",
+    pending:
+      "This outage has not yet been reported to the PSAP.",
+    not_required:
+      "The outage is below the 900k FCC reporting threshold, so no PSAP " +
+      "report is required.",
+  };
+
   /**
    * Returns the reusable info-tip markup for `text`, or "" when the InfoTip
    * helper is unavailable.
@@ -198,6 +211,7 @@
         "</span>" +
         '<span class="psap-summary__label">' +
         escapeHtml(statusLabel(status)) +
+        tip(STATUS_TIP[status] || PSAP_STATUS_TIP) +
         "</span>" +
         "</div>"
       );

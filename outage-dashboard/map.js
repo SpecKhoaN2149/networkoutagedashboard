@@ -202,6 +202,20 @@
       map.setView(US_CENTER, US_ZOOM);
     }
 
+    // Keep the map US-only: clamp panning to a bounding box around the
+    // continental US and prevent zooming out past the US-framing zoom, so the
+    // user cannot drift off to the rest of the world.
+    var usMaxBounds = L.latLngBounds([
+      [21, -128], // SW: below southern CA / TX
+      [51, -63],  // NE: above the northern border / Maine
+    ]);
+    map.setMaxBounds(usMaxBounds);
+    map.options.maxBoundsViscosity = 1.0; // hard stop at the bounds
+    var framedZoom = map.getZoom();
+    if (typeof framedZoom === "number") {
+      map.setMinZoom(framedZoom); // can't zoom out beyond the US framing
+    }
+
     // MapHandle: wraps the Leaflet map plus the tile layer and framing bounds
     // so later tasks (10.1 render/update, 17.1 tile-failure handling) have the
     // references they need. `map` is the raw L.map instance.

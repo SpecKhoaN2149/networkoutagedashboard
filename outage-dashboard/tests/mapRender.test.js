@@ -37,11 +37,14 @@ window.ColorScale = ColorScale;
 function makeFakeLeaflet() {
   function makeMap() {
     return {
+      options: {},
       fitBounds() {},
       setView() {},
       getZoom() {
         return 4;
       },
+      setMaxBounds() {},
+      setMinZoom() {},
       addLayer() {},
       removeLayer() {},
     };

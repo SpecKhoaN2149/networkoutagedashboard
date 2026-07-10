@@ -318,10 +318,12 @@
 
     var reportable = isReportable(outage);
     var reportableBadge =
+      '<div class="detail-fcc-row">' +
       (reportable
         ? '<span class="detail-fcc detail-fcc--yes">\u26A0 FCC REPORTABLE</span>'
         : '<span class="detail-fcc detail-fcc--no">below threshold</span>') +
-      tip(TIP.fcc);
+      tip(TIP.fcc) +
+      "</div>";
 
     var psap = resolvePsap(outage);
     var reported = reportedValue(outage, psap);
@@ -469,7 +471,7 @@
       '<div class="detail-section detail-section--psap">' +
       '<div class="detail-section__title">PSAP / 911</div>' +
       psapBody +
-      '<a class="detail-psap-link" href="psap.html?v=6">View all PSAPs \u2192</a>' +
+      '<a class="detail-psap-link" href="psap.html?v=7">View all PSAPs \u2192</a>' +
       "</div>" +
       "</div>";
 

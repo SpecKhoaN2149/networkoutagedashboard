@@ -1255,6 +1255,13 @@ h3 {
   border: 1px solid var(--border);
 }
 
+/* Keep the FCC badge and its info "i" on the same line */
+.detail-fcc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .detail-section {
   display: flex;
   flex-direction: column;
