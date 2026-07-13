@@ -126,7 +126,6 @@
           return (
             "<tr>" +
             "<td>" + escapeHtml(o.name) + "</td>" +
-            "<td>" + escapeHtml(o.network) + "</td>" +
             "<td>" + escapeHtml(o.region) + "</td>" +
             '<td class="num">' + fmt(o.currentLostUsers) + "</td>" +
             '<td class="num over">+' + fmt(over) + "</td>" +
@@ -147,7 +146,7 @@
         "</div>" +
         '<table class="report-table">' +
         "<thead><tr>" +
-        "<th>Outage</th><th>Network</th><th>Region</th>" +
+        "<th>Outage</th><th>Region</th>" +
         "<th>Lost users</th><th>Over 900k</th><th>Growth /min</th>" +
         "<th>Threshold reached" + tip(THRESHOLD_TIP) + "</th>" +
         "<th>Impact" + tip(IMPACT_TIP) + "</th>" +

@@ -6,9 +6,9 @@
     <title>Spectrum — PSAP / 911 Status</title>
 
     <!-- Shared dashboard styles (PSAP-page styles live here too) -->
-    <link rel="stylesheet" href="styles.css?v=8" />
+    <link rel="stylesheet" href="styles.css?v=9" />
     <!-- Theme init (applied before paint to avoid a flash of the wrong theme) -->
-    <script src="theme.js?v=8"></script>
+    <script src="theme.js?v=9"></script>
   </head>
   <body>
     <div class="app app--page">
@@ -21,7 +21,7 @@
           <span class="header__subtitle">PSAP / 911 Status</span>
         </div>
         <div class="header__meta">
-          <a class="header__nav-link" href="index.html?v=8">&larr; Back to dashboard</a>
+          <a class="header__nav-link" href="index.html?v=9">&larr; Back to dashboard</a>
           <div class="header__updated">
             Last updated:
             <span class="header__updated-value" id="last-updated">—</span>
@@ -29,6 +29,13 @@
           <button class="theme-toggle" id="theme-toggle" type="button" title="Toggle light / dark theme" aria-label="Toggle light / dark theme">🌙</button>
         </div>
       </header>
+
+      <!-- Management-view subtitle: this page lets an operator move PSAPs
+           between reporting statuses (persisted client-side in localStorage). -->
+      <p class="page-subtitle" id="psap-subtitle">
+        Manage PSAP / 911 notification status — change a status below to update
+        it (saved in your browser).
+      </p>
 
       <!-- Summary counts by status -->
       <section class="psap-summary" id="psap-summary" aria-label="PSAP status summary">
@@ -40,6 +47,9 @@
            narrow only the table. This slim bar just hosts the live count. -->
       <div class="filter-bar" id="psap-filter" role="group" aria-label="Filter PSAPs">
         <span class="filter-bar__label">Filter each column below</span>
+        <button class="psap-reset-btn" id="psap-reset" type="button" title="Clear all status changes and restore the default statuses">
+          Reset to defaults
+        </button>
         <span class="filter-bar__spacer"></span>
         <span class="filter-bar__count" id="psap-filter-count" aria-live="polite"></span>
       </div>
@@ -61,12 +71,12 @@
          Scripts (no Leaflet needed on this page). Plain <script> tags,
          no ES module imports.
          ============================================================ -->
-    <script src="constants.js?v=8"></script>
-    <script src="infoTip.js?v=8"></script>
-    <script src="mockData.js?v=8"></script>
-    <script src="psapData.js?v=8"></script>
-    <script src="filters.js?v=8"></script>
-    <script src="header.js?v=8"></script>
-    <script src="psapPage.js?v=8"></script>
+    <script src="constants.js?v=9"></script>
+    <script src="infoTip.js?v=9"></script>
+    <script src="mockData.js?v=9"></script>
+    <script src="psapData.js?v=9"></script>
+    <script src="filters.js?v=9"></script>
+    <script src="header.js?v=9"></script>
+    <script src="psapPage.js?v=9"></script>
   </body>
 </html>

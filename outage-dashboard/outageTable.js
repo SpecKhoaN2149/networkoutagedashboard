@@ -3,10 +3,12 @@
  * dashboard mockup.
  *
  * Renders the tabular list of active outages into the side panel. Each row
- * shows the outage name, region, originating network (Spectrum/Cox), current
- * lost users, growth rate (users/min), a severity chip that is visually
- * distinct per severity level, and the start time. When the outage set is
- * empty, the table is replaced by an empty-state message with zero rows.
+ * shows the outage name, region, cause, current lost users, growth rate
+ * (users/min), a severity chip that is visually distinct per severity level,
+ * the linked PSAP status, and the start time. The originating network is no
+ * longer shown (the product is a single Spectrum network, so it was redundant
+ * with the header branding). When the outage set is empty, the table is
+ * replaced by an empty-state message with zero rows.
  *
  * Requirements: 10.1 (one row per outage with the required fields),
  * 10.2 (severity chip style corresponds to severity, visually distinct per
@@ -68,7 +70,6 @@
     { label: "Outage", filter: { type: "text", key: "name", placeholder: "Filter name" } },
     { label: "Region", filter: { type: "text", key: "region", placeholder: "Filter region" } },
     { label: "Cause", filter: { type: "select", key: "cause", options: CAUSES } },
-    { label: "Network", filter: null },
     { label: "Lost users", filter: null },
     { label: "Growth /min", filter: null },
     { label: "Severity", filter: { type: "select", key: "severity", options: SEVERITIES } },
@@ -168,24 +169,6 @@
   }
 
   /**
-   * Builds the HTML for the network tag cell (colored dot + brand name),
-   * applying the Spectrum/Cox modifier so the dot picks up the brand color.
-   * @param {string} network - "Spectrum" | "Cox".
-   * @returns {string}
-   */
-  function networkTagHtml(network) {
-    var modifier =
-      network === "Cox" ? "network-tag--cox" : "network-tag--spectrum";
-    return (
-      '<span class="network-tag ' +
-      modifier +
-      '"><span class="network-tag__dot"></span>' +
-      escapeHtml(network) +
-      "</span>"
-    );
-  }
-
-  /**
    * Builds the HTML for a severity chip, applying the modifier class that
    * corresponds to the outage severity so each level is visually distinct
    * (Requirement 10.2).
@@ -270,9 +253,6 @@
       "</td>" +
       '<td class="outage-cause">' +
       escapeHtml(outage.cause == null ? "\u2014" : outage.cause) +
-      "</td>" +
-      "<td>" +
-      networkTagHtml(outage.network) +
       "</td>" +
       '<td class="num">' +
       formatNumber(outage.currentLostUsers) +

@@ -269,31 +269,62 @@ h3 {
 /* ============================================================
  * 4b. FCC reportable alert banner + badges
  * ============================================================ */
-.fcc-banner {
+/* On-map FCC reportable alert: an absolutely-positioned pill/toast pinned to
+ * the top-center of the map panel. Because it is position:absolute inside
+ * .map-panel, showing/hiding it NEVER shifts any other page content. Its high
+ * z-index keeps it above the tiles and legend; top-center keeps it clear of
+ * the top-right "Bubbles | Heatmap" toggle and the bottom-left legend. */
+.fcc-alert {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 650;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border-radius: var(--radius-md);
+  gap: 8px;
+  max-width: calc(100% - 28px);
+  padding: 7px 12px;
+  border-radius: 999px;
   background: linear-gradient(90deg, #7a0f1a, #b3121f);
   border: 1px solid #ff5a68;
   color: #fff;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.3px;
-  box-shadow: var(--shadow);
-  animation: fcc-banner-pulse 1.8s ease-in-out infinite;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  animation: fcc-alert-pulse 1.8s ease-in-out infinite;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.fcc-banner__hint {
-  margin-left: auto;
-  font-size: 11px;
+.fcc-alert[hidden] {
+  display: none;
+}
+
+.fcc-alert__icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.fcc-alert__count {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.fcc-alert__label {
   font-weight: 600;
+}
+
+.fcc-alert__hint {
+  font-size: 10.5px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   opacity: 0.9;
-  white-space: nowrap;
+  padding-left: 4px;
+  border-left: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 /* Reportable KPI card is clickable when in the alert state */
@@ -301,26 +332,13 @@ h3 {
   cursor: pointer;
 }
 
-.fcc-banner[hidden] {
-  display: none;
-}
-
-.fcc-banner__icon {
-  font-size: 16px;
-  line-height: 1;
-}
-
-.fcc-banner__count {
-  font-variant-numeric: tabular-nums;
-}
-
-@keyframes fcc-banner-pulse {
+@keyframes fcc-alert-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 45, 45, 0.5);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), 0 0 0 0 rgba(255, 45, 45, 0.5);
   }
   50% {
-    box-shadow: 0 0 16px 2px rgba(255, 45, 45, 0.55);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), 0 0 16px 2px rgba(255, 45, 45, 0.6);
   }
 }
 
@@ -1486,6 +1504,54 @@ h3 {
   overflow: visible;
 }
 
+/* Management-view subtitle above the summary tiles. */
+.page-subtitle {
+  margin: -4px 0 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* "Reset to defaults" button in the PSAP filter bar. */
+.psap-reset-btn {
+  appearance: none;
+  cursor: pointer;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.psap-reset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Per-row Status management control: badge + status <select>. */
+.psap-status-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.psap-status-select {
+  appearance: auto;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+}
+
+.psap-status-select:hover,
+.psap-status-select:focus {
+  border-color: var(--accent);
+}
+
 .psap-summary {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1714,16 +1780,16 @@ h3 {
   opacity: 1;
 }
 
-/* Inside the FCC banner (white text on red), keep the badge legible. */
-.fcc-banner .info-tip {
+/* Inside the on-map FCC alert (white text on red), keep the badge legible. */
+.fcc-alert .info-tip {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.6);
   color: #fff;
 }
 
-.fcc-banner .info-tip:hover,
-.fcc-banner .info-tip:focus,
-.fcc-banner .info-tip:focus-within {
+.fcc-alert .info-tip:hover,
+.fcc-alert .info-tip:focus,
+.fcc-alert .info-tip:focus-within {
   border-color: #fff;
   color: #fff;
 }

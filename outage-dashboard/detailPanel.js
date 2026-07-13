@@ -7,11 +7,9 @@
  *   - Selected: full details for one outage plus its PSAP / 911 reporting
  *               record (the key new information this redesign surfaces).
  *
- * PSAP "Reported to PSAP / 911" value logic — driven solely by the linked
- * PSAP record's status, so this panel and the PSAP status page always agree:
- *   - "Yes"          — PSAP status is "notified" or "acknowledged".
- *   - "No"           — PSAP status is "pending" (not yet reported).
- *   - "Not required" — PSAP status is "not_required".
+ * The PSAP / 911 section shows a SINGLE status line — the PSAP status badge
+ * (Acknowledged / Notified / Pending / Not required) with an info "i" that
+ * explains what each status means — alongside the PSAP name and county/state.
  * (The FCC-reportable badge is shown separately and is based on the 900k
  *  threshold; PSAP notification can happen independently of that flag.)
  *
@@ -109,34 +107,6 @@
     return null;
   }
 
-  /**
-   * Computes the "Reported to PSAP / 911" value for an outage + its PSAP.
-   * @returns {{ value: string, modifier: string }}
-   */
-  function reportedValue(outage, psap) {
-    var status = psap && psap.status;
-    if (status === "notified" || status === "acknowledged") {
-      return { value: "Yes", modifier: "detail-reported--yes" };
-    }
-    if (status === "pending") {
-      return { value: "No", modifier: "detail-reported--no" };
-    }
-    // "not_required" or no linked PSAP record.
-    return { value: "Not required", modifier: "detail-reported--none" };
-  }
-
-  function networkChipHtml(network) {
-    var modifier =
-      network === "Cox" ? "network-tag--cox" : "network-tag--spectrum";
-    return (
-      '<span class="network-tag ' +
-      modifier +
-      '"><span class="network-tag__dot"></span>' +
-      escapeHtml(network) +
-      "</span>"
-    );
-  }
-
   function severityChipHtml(severity) {
     var modifier = "severity-chip--" + escapeHtml(severity);
     return (
@@ -173,9 +143,6 @@
 
   // Concise plain-language descriptions surfaced via the "i" tooltips.
   var TIP = {
-    reported:
-      "Whether the local 911 authority (PSAP) has been notified for this " +
-      "outage. Derived from the PSAP's status.",
     psapStatus:
       "PSAP = the local 911 call center. Acknowledged = PSAP confirmed " +
       "receipt; Notified = report sent, awaiting acknowledgement; Pending = " +
@@ -326,7 +293,6 @@
       "</div>";
 
     var psap = resolvePsap(outage);
-    var reported = reportedValue(outage, psap);
 
     // "Revised down after investigation" indicator (task 4a).
     var revisedHtml = "";
@@ -397,18 +363,12 @@
         "</div>";
     }
 
+    // A single PSAP status line (badge + info "i") replaces the old duplicated
+    // "Reported to PSAP / 911" Yes/No row — the status tip already explains
+    // what "reported" means, so showing both said the same thing twice.
     var psapBody;
     if (psap) {
       psapBody =
-        fieldRowHtml(
-          "Reported to PSAP / 911",
-          '<span class="detail-reported ' +
-            reported.modifier +
-            '">' +
-            escapeHtml(reported.value) +
-            "</span>",
-          tip(TIP.reported)
-        ) +
         fieldRowHtml("PSAP", escapeHtml(psap.name)) +
         fieldRowHtml("PSAP status", statusBadgeHtml(psap.status), tip(TIP.psapStatus)) +
         fieldRowHtml(
@@ -417,15 +377,6 @@
         );
     } else {
       psapBody =
-        fieldRowHtml(
-          "Reported to PSAP / 911",
-          '<span class="detail-reported ' +
-            reported.modifier +
-            '">' +
-            escapeHtml(reported.value) +
-            "</span>",
-          tip(TIP.reported)
-        ) +
         '<div class="detail-row detail-row--muted">No linked PSAP record.</div>';
     }
 
@@ -436,7 +387,6 @@
       escapeHtml(outage.name) +
       "</h3>" +
       '<div class="detail-card__chips">' +
-      networkChipHtml(outage.network) +
       severityChipHtml(outage.severity) +
       "</div>" +
       reportableBadge +
@@ -471,7 +421,7 @@
       '<div class="detail-section detail-section--psap">' +
       '<div class="detail-section__title">PSAP / 911</div>' +
       psapBody +
-      '<a class="detail-psap-link" href="psap.html?v=7">View all PSAPs \u2192</a>' +
+      '<a class="detail-psap-link" href="psap.html?v=9">View all PSAPs \u2192</a>' +
       "</div>" +
       "</div>";
 

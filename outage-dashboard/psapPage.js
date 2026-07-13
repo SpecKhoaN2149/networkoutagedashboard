@@ -131,6 +131,41 @@
   }
 
   /**
+   * Builds the per-row management control for the Status column: a status badge
+   * (for quick visual scanning) plus a <select> of the four statuses defaulting
+   * to the PSAP's current status. Changing it calls PsapData.setPsapStatus.
+   * The select carries data-psap-status-select + data-psap-id so the delegated
+   * change handler on the table can identify which PSAP to update.
+   */
+  function statusControlHtml(psap) {
+    var current = psap.status || "pending";
+    var options = STATUS_ORDER.map(function (status) {
+      return (
+        '<option value="' +
+        escapeHtml(status) +
+        '"' +
+        (status === current ? " selected" : "") +
+        ">" +
+        escapeHtml(statusLabel(status)) +
+        "</option>"
+      );
+    }).join("");
+    return (
+      '<div class="psap-status-cell">' +
+      statusBadgeHtml(current) +
+      '<select class="psap-status-select" data-psap-status-select ' +
+      'data-psap-id="' +
+      escapeHtml(psap.id) +
+      '" aria-label="Set status for ' +
+      escapeHtml(psap.name) +
+      '">' +
+      options +
+      "</select>" +
+      "</div>"
+    );
+  }
+
+  /**
    * Builds a lookup of outageId -> outage from window.MockData so each PSAP row
    * can show its linked outage's name and current lost users.
    */
@@ -359,7 +394,7 @@
           lost +
           "</td>" +
           "<td>" +
-          statusBadgeHtml(psap.status) +
+          statusControlHtml(psap) +
           "</td>" +
           '<td class="psap-phone">' +
           escapeHtml(psap.phone) +
@@ -449,6 +484,35 @@
     applyPsapFilter();
   }
 
+  /**
+   * Handles a per-row Status <select> change: writes the override via
+   * PsapData.setPsapStatus (which stamps updatedAt = now), then re-renders the
+   * whole page so the summary counts, the row's "last updated", and the table
+   * (still narrowed by the active per-column filters) all reflect the change.
+   */
+  function onStatusSelectChange(evt) {
+    var t = evt.target;
+    if (!t || !t.getAttribute || t.getAttribute("data-psap-status-select") === null) {
+      return;
+    }
+    var psapId = t.getAttribute("data-psap-id");
+    var status = t.value;
+    var PsapData = global.PsapData;
+    if (!psapId || !PsapData || typeof PsapData.setPsapStatus !== "function") {
+      return;
+    }
+    try {
+      PsapData.setPsapStatus(psapId, status);
+    } catch (e) {
+      /* invalid status — ignore in this mockup */
+      return;
+    }
+    // Re-render from the merged (override-applied) data. This refreshes the
+    // summary counts and the row's last-updated timestamp, and re-applies the
+    // current per-column filters + sorting.
+    render();
+  }
+
   function init() {
     render();
 
@@ -467,6 +531,21 @@
         }
         table.addEventListener("input", onColumnFilterChange);
         table.addEventListener("change", onColumnFilterChange);
+        // Per-row status management control (delegated so it survives
+        // tbody re-renders on each edit).
+        table.addEventListener("change", onStatusSelectChange);
+      }
+
+      // Wire the "Reset to defaults" button: clears all overrides and re-renders.
+      var resetBtn = document.getElementById("psap-reset");
+      if (resetBtn) {
+        resetBtn.addEventListener("click", function () {
+          var PsapData = global.PsapData;
+          if (PsapData && typeof PsapData.resetPsaps === "function") {
+            PsapData.resetPsaps();
+          }
+          render();
+        });
       }
     }
 

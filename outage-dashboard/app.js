@@ -61,19 +61,25 @@
     return (typeof window !== "undefined" && window[name]) || null;
   }
 
+  // Id of the on-map FCC reportable alert overlay (see index.html: the
+  // absolutely-positioned <div id="fcc-alert"> inside .map-panel).
+  var FCC_ALERT_ID = "fcc-alert";
+
   /**
-   * Shows/hides the top FCC reportable alert banner based on how many outages
-   * have crossed the 900k FCC/911 reporting threshold. When one or more are
-   * reportable it lists the count and the affected outage names; otherwise the
-   * banner is hidden. Guarded so a missing element/global never throws.
+   * Shows/hides the on-map FCC reportable alert overlay based on how many
+   * outages have crossed the 900k FCC/911 reporting threshold. It is an
+   * absolutely-positioned pill over the map, so showing/hiding it never shifts
+   * any other page content. When one or more outages are reportable it shows
+   * the count as a compact, pulsing, clickable toast; otherwise it is hidden.
+   * Guarded so a missing element/global never throws.
    *
    * @param {Array} list - the current outage list.
    */
   function updateFccBanner(list) {
     safely("updateFccBanner", function () {
       if (typeof document === "undefined") return;
-      var banner = document.getElementById("fcc-banner");
-      if (!banner) return;
+      var alertEl = document.getElementById(FCC_ALERT_ID);
+      if (!alertEl) return;
 
       var C = ns("DashboardConstants");
       var isReportable =
@@ -86,16 +92,10 @@
       var reportable = (Array.isArray(list) ? list : []).filter(isReportable);
 
       if (reportable.length === 0) {
-        banner.hidden = true;
-        banner.innerHTML = "";
+        alertEl.hidden = true;
+        alertEl.innerHTML = "";
         return;
       }
-
-      var names = reportable
-        .map(function (o) {
-          return o.name + " (" + o.region + ")";
-        })
-        .join(", ");
 
       var InfoTip = ns("InfoTip");
       var thresholdTip =
@@ -106,18 +106,19 @@
             )
           : "";
 
-      banner.innerHTML =
-        '<span class="fcc-banner__icon">\u26A0</span>' +
-        '<span class="fcc-banner__count">' +
+      // Compact pill/toast: icon + count + short label + "click for details".
+      // The affected outage names are intentionally omitted so the overlay
+      // stays small enough to sit comfortably over the map.
+      alertEl.innerHTML =
+        '<span class="fcc-alert__icon">\u26A0</span>' +
+        '<span class="fcc-alert__count">' +
         reportable.length +
-        "</span> outage" +
-        (reportable.length === 1 ? "" : "s") +
-        " at/over the 900k FCC reporting threshold" +
+        "</span>" +
+        '<span class="fcc-alert__label">FCC reportable (\u2265900k)' +
         thresholdTip +
-        " \u2014 report to FCC &amp; 911/PSAP: " +
-        names +
-        '<span class="fcc-banner__hint">click for details \u2192</span>';
-      banner.hidden = false;
+        "</span>" +
+        '<span class="fcc-alert__hint">details \u2192</span>';
+      alertEl.hidden = false;
     });
   }
 
@@ -456,9 +457,9 @@
       var ReportModal = ns("ReportModal");
       if (!ReportModal || typeof document === "undefined") return;
 
-      var banner = document.getElementById("fcc-banner");
-      if (banner) {
-        banner.addEventListener("click", function () {
+      var alertEl = document.getElementById(FCC_ALERT_ID);
+      if (alertEl) {
+        alertEl.addEventListener("click", function () {
           ReportModal.open(outages);
         });
       }

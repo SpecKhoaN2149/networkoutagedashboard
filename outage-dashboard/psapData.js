@@ -132,28 +132,190 @@
     },
   ];
 
+  // --- localStorage-backed status override store --------------------------
+  // This is a client-side mockup (no backend): the seed PSAPs above are the
+  // canonical base, and the PSAP management page can override an individual
+  // PSAP's reporting status. Overrides are persisted in localStorage keyed by
+  // PSAP id as { status, updatedAt } and merged over the seed on read, so a
+  // status change made on the PSAP page is reflected on the dashboard too
+  // (both pages share the same localStorage origin).
+
+  var STORAGE_KEY = "psap-status-overrides";
+
+  // The four allowed reporting statuses. Kept local so this module stays
+  // self-contained (and testable under Node/Vitest without other modules).
+  var ALLOWED_STATUSES = [
+    "acknowledged",
+    "notified",
+    "pending",
+    "not_required",
+  ];
+
   /**
-   * Returns the full seed set of PSAPs. A fresh array of fresh objects is
+   * Resolves a browser-like localStorage, preferring a bare `localStorage`
+   * global and falling back to `global.localStorage` (e.g. jsdom exposes it on
+   * `window`). Returns null when none is available.
+   */
+  function getStorage() {
+    // Prefer the module's own global (window in the browser / jsdom) so we do
+    // not touch a bare `localStorage` global unnecessarily.
+    if (global && global.localStorage) {
+      return global.localStorage;
+    }
+    if (typeof localStorage !== "undefined" && localStorage !== null) {
+      return localStorage;
+    }
+    return null;
+  }
+
+  /**
+   * Returns true when a browser-like localStorage is available. Guards every
+   * storage access so the module still works under Node/Vitest with no storage
+   * (in which case getPsaps simply returns the seed).
+   */
+  function hasStorage() {
+    return getStorage() !== null;
+  }
+
+  /**
+   * Reads the override map ({ [psapId]: { status, updatedAt } }) from storage.
+   * Returns {} when storage is unavailable or the stored value is missing or
+   * malformed (so a corrupt entry never breaks reads).
+   */
+  function readOverrides() {
+    var storage = getStorage();
+    if (!storage) {
+      return {};
+    }
+    try {
+      var raw = storage.getItem(STORAGE_KEY);
+      if (!raw) {
+        return {};
+      }
+      var parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  /**
+   * Persists the override map to storage. No-op when storage is unavailable.
+   */
+  function writeOverrides(overrides) {
+    var storage = getStorage();
+    if (!storage) {
+      return;
+    }
+    try {
+      storage.setItem(STORAGE_KEY, JSON.stringify(overrides || {}));
+    } catch (e) {
+      /* ignore quota / serialization errors in this mockup */
+    }
+  }
+
+  /**
+   * Builds a fresh seed PSAP record for a definition. `updatedAt` is derived
+   * from `now` so it is always a valid ISO 8601 timestamp in the recent past.
+   */
+  function seedRecord(def, now) {
+    return {
+      id: def.id,
+      name: def.name,
+      county: def.county,
+      state: def.state,
+      phone: def.phone,
+      status: def.status,
+      linkedOutageId: def.linkedOutageId,
+      updatedAt: new Date(now - def.updatedMinutesAgo * 60 * 1000).toISOString(),
+    };
+  }
+
+  /**
+   * Returns the full set of PSAPs: the seed definitions with any saved
+   * localStorage status overrides merged in. A fresh array of fresh objects is
    * returned on every call so callers can freely sort/mutate copies without
-   * corrupting the canonical definitions. `updatedAt` is derived from `now` so
-   * it is always a valid ISO 8601 timestamp in the recent past.
+   * corrupting the canonical definitions. When an override exists for a PSAP,
+   * its `status` and `updatedAt` come from the override (only valid statuses
+   * are applied); otherwise the seed values are used.
    */
   function getPsaps() {
     var now = Date.now();
+    var overrides = readOverrides();
     return SEED_DEFS.map(function (def) {
-      return {
-        id: def.id,
-        name: def.name,
-        county: def.county,
-        state: def.state,
-        phone: def.phone,
-        status: def.status,
-        linkedOutageId: def.linkedOutageId,
-        updatedAt: new Date(
-          now - def.updatedMinutesAgo * 60 * 1000
-        ).toISOString(),
-      };
+      var record = seedRecord(def, now);
+      var override = overrides[def.id];
+      if (
+        override &&
+        typeof override === "object" &&
+        ALLOWED_STATUSES.indexOf(override.status) !== -1
+      ) {
+        record.status = override.status;
+        if (override.updatedAt) {
+          record.updatedAt = override.updatedAt;
+        }
+      }
+      return record;
     });
+  }
+
+  /**
+   * Overrides a PSAP's reporting status and persists it to localStorage as
+   * { status, updatedAt: <now ISO> }. Returns the updated (merged) PSAP record,
+   * or null if no PSAP matches the given id. Throws a RangeError when `status`
+   * is not one of the four allowed values.
+   *
+   * @param {string} psapId
+   * @param {string} status - one of "acknowledged" | "notified" | "pending" |
+   *   "not_required".
+   * @returns {Object|null}
+   */
+  function setPsapStatus(psapId, status) {
+    if (ALLOWED_STATUSES.indexOf(status) === -1) {
+      throw new RangeError(
+        "Invalid PSAP status: " +
+          status +
+          " (expected one of " +
+          ALLOWED_STATUSES.join(", ") +
+          ")"
+      );
+    }
+    // Only allow overriding a known seed PSAP.
+    var known = SEED_DEFS.some(function (def) {
+      return def.id === psapId;
+    });
+    if (!known) {
+      return null;
+    }
+
+    var overrides = readOverrides();
+    overrides[psapId] = { status: status, updatedAt: new Date().toISOString() };
+    writeOverrides(overrides);
+
+    // Return the merged record so callers can reflect the change immediately.
+    var list = getPsaps();
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === psapId) {
+        return list[i];
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Clears all status overrides, restoring every PSAP to its seed status.
+   * No-op (beyond returning the seed) when storage is unavailable.
+   */
+  function resetPsaps() {
+    var storage = getStorage();
+    if (storage) {
+      try {
+        storage.removeItem(STORAGE_KEY);
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    return getPsaps();
   }
 
   /**
@@ -177,6 +339,11 @@
   var api = {
     getPsaps: getPsaps,
     getPsapForOutage: getPsapForOutage,
+    setPsapStatus: setPsapStatus,
+    resetPsaps: resetPsaps,
+    // Exposed for tests / callers that want the allowed status list + key.
+    ALLOWED_STATUSES: ALLOWED_STATUSES,
+    STORAGE_KEY: STORAGE_KEY,
   };
 
   // Attach to the browser global so <script>-loaded modules can read it.

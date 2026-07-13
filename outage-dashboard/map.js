@@ -374,7 +374,6 @@
       "</div>" +
       reportableBanner +
       row("Region", outage.region) +
-      row("Network", outage.network) +
       row("Lost users", formatNumber(outage.currentLostUsers)) +
       row("Growth", formatNumber(outage.growthRatePerMin) + " users/min") +
       row("Severity", outage.severity) +
