@@ -202,6 +202,11 @@
     // bubbles are visible). Defaults are permissive so everything shows.
     var filter = { severity: "all", reportableOnly: false, search: "" };
 
+    // Current map display mode: "bubbles" (default) or "heatmap". Remembered
+    // across filter changes and live-drift ticks so the heat layer keeps
+    // refreshing from the current filtered list while the toggle stays put.
+    var mapMode = "bubbles";
+
     // Per-column table filters (task 3). Layered ON TOP of the shared filter,
     // applied to the TABLE ONLY. Read live from the table's filter row.
     var columnFilters = {};
@@ -348,6 +353,17 @@
         }
       });
 
+      // In Heatmap mode, rebuild the heat points from the current filtered
+      // list so the heatmap tracks filter changes and live drift.
+      if (mapMode === "heatmap") {
+        safely("MapRenderer.updateHeatmap (filter)", function () {
+          var MapRenderer = ns("MapRenderer");
+          if (MapRenderer && MapRenderer.updateHeatmap && mapHandle) {
+            MapRenderer.updateHeatmap(mapHandle, filtered);
+          }
+        });
+      }
+
       updateFilterCount(tableRows.length, outages.length);
 
       // The table rows were re-rendered — re-apply the current selection.
@@ -381,6 +397,28 @@
       if (MapRenderer && mapHandle) {
         MapRenderer.renderOutages(mapHandle, outages);
       }
+    });
+
+    // --- Wire the on-map "Bubbles | Heatmap" toggle ------------------------
+    // Switching to Heatmap hides the bubbles and shows a heat layer built from
+    // the current filtered list; switching back removes the heat layer and
+    // restores the bubbles. The chosen mode is remembered in `mapMode` so the
+    // heatmap keeps refreshing on filter changes and drift ticks.
+    safely("MapRenderer.addMapModeToggle", function () {
+      var MapRenderer = ns("MapRenderer");
+      if (!MapRenderer || !MapRenderer.addMapModeToggle || !mapHandle) {
+        return;
+      }
+      MapRenderer.addMapModeToggle(mapHandle, function (mode) {
+        mapMode = mode === "heatmap" ? "heatmap" : "bubbles";
+        if (mapMode === "heatmap") {
+          if (MapRenderer.showHeatmap) {
+            MapRenderer.showHeatmap(mapHandle, getFilteredOutages());
+          }
+        } else if (MapRenderer.hideHeatmap) {
+          MapRenderer.hideHeatmap(mapHandle);
+        }
+      });
     });
 
     // --- Initial render: legend --------------------------------------------

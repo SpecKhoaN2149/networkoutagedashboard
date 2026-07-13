@@ -35,26 +35,30 @@
     (global && global.ColorScale) ||
     (typeof require !== "undefined" ? require("./colorScale") : undefined);
 
-  var SIZE_LEGEND_SAMPLES = Constants.SIZE_LEGEND_SAMPLES;
+  var LOST_USERS_LEGEND_SAMPLES = Constants.LOST_USERS_LEGEND_SAMPLES;
   var COLOR_LEGEND_THRESHOLDS = Constants.COLOR_LEGEND_THRESHOLDS;
-  var radiusForGrowthRate = SizeScale.radiusForGrowthRate;
+  var radiusForLostUsers = SizeScale.radiusForLostUsers;
   var colorForLostUsers = ColorScale.colorForLostUsers;
 
   /**
    * Produces the LegendModel used by the legend view to explain both encodings.
    *
-   * Shape (see design doc, Model 3):
+   * Both the bubble SIZE and COLOR now encode CURRENT lost users (impact /
+   * closeness to the 900k FCC threshold); velocity is shown as a pulse and is
+   * described by a note in the view.
+   *
+   * Shape:
    *   {
-   *     sizeSamples: [{ label, growthRatePerMin, radiusPx }],
+   *     sizeSamples: [{ label, lostUsers, radiusPx }],
    *     colorStops:  [{ label, lostUsers, color }]
    *   }
    *
-   * Guarantees (Requirements 4.1-4.4):
-   *   - Exactly three size samples labeled "slow", "medium", "fast", each with
-   *     radiusPx === radiusForGrowthRate(growthRatePerMin) (Req 4.1, 4.3).
-   *   - At least three color stops (low / elevated / severe) mapping to the
+   * Guarantees:
+   *   - Size samples (low / elevated / FCC 900k), each with
+   *     radiusPx === radiusForLostUsers(lostUsers).
+   *   - At least three color stops (low / elevated / FCC report) mapping to the
    *     yellow / orange / red ramp, each with
-   *     color === colorForLostUsers(lostUsers) (Req 4.2, 4.4).
+   *     color === colorForLostUsers(lostUsers).
    *
    * The legend is derived strictly by calling the same scale functions the map
    * uses, so consistency is guaranteed by construction rather than by copying
@@ -63,12 +67,12 @@
    * @returns {{sizeSamples: Array, colorStops: Array}} the LegendModel.
    */
   function getLegendModel() {
-    var sizeSamples = SIZE_LEGEND_SAMPLES.map(function (sample) {
+    var sizeSamples = LOST_USERS_LEGEND_SAMPLES.map(function (sample) {
       return {
         label: sample.label,
-        growthRatePerMin: sample.growthRatePerMin,
-        // Derived from the SAME size scale the map uses (Req 4.3).
-        radiusPx: radiusForGrowthRate(sample.growthRatePerMin),
+        lostUsers: sample.lostUsers,
+        // Derived from the SAME lost-users size scale the map uses.
+        radiusPx: radiusForLostUsers(sample.lostUsers),
       };
     });
 

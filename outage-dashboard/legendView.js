@@ -82,7 +82,7 @@
 
     var heading = document.createElement("div");
     heading.className = "legend__heading";
-    heading.textContent = "Growth rate (bubble size)";
+    heading.textContent = "Users affected (bubble size & color)";
     section.appendChild(heading);
 
     var sizes = document.createElement("div");
@@ -126,7 +126,7 @@
 
     var heading = document.createElement("div");
     heading.className = "legend__heading";
-    heading.textContent = "Lost users (color)";
+    heading.textContent = "Closeness to 900k (color)";
     section.appendChild(heading);
 
     // The gradient bar's yellow->orange->red background is defined in CSS.
@@ -147,6 +147,21 @@
 
     section.appendChild(labels);
     return section;
+  }
+
+  /**
+   * Builds a short note explaining the velocity pulse encoding (growth rate is
+   * no longer mapped to size/color; it drives a pulsing ring instead).
+   *
+   * @returns {HTMLElement} the note element.
+   */
+  function buildPulseNote() {
+    var note = document.createElement("div");
+    note.className = "legend__note";
+    note.textContent =
+      "Pulse = growth velocity (faster pulse = growing faster); " +
+      "red pulse = FCC reportable.";
+    return note;
   }
 
   /**
@@ -234,6 +249,7 @@
     el.appendChild(buildHeaderBar(el));
     el.appendChild(buildSizeSection(model.sizeSamples));
     el.appendChild(buildColorSection(model.colorStops));
+    el.appendChild(buildPulseNote());
 
     if (wasCollapsed) {
       el.classList.add("legend--collapsed");

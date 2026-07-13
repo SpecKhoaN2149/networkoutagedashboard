@@ -75,10 +75,22 @@
   ];
 
   // Legend growth-rate samples for the size gradient (Requirement 4.1).
+  // Retained for backwards-compat; the map no longer sizes bubbles by growth
+  // rate (velocity is now shown as a pulse), so the legend uses the lost-user
+  // samples below instead.
   var SIZE_LEGEND_SAMPLES = [
     { label: "slow", growthRatePerMin: 25 },
     { label: "medium", growthRatePerMin: 150 },
     { label: "fast", growthRatePerMin: 400 },
+  ];
+
+  // Legend lost-user samples for the bubble SIZE (and color) legend. Both the
+  // bubble size and fill color now encode CURRENT lost users (closeness to the
+  // 900k FCC reporting threshold), so these samples drive the size swatches.
+  var LOST_USERS_LEGEND_SAMPLES = [
+    { label: "low", lostUsers: 100000 },
+    { label: "elevated", lostUsers: 450000 },
+    { label: "FCC 900k", lostUsers: FCC_REPORT_THRESHOLD },
   ];
 
   // Allowed network/brand values. The product is a single Spectrum network
@@ -227,6 +239,7 @@
     HEAT_RAMP_STOPS: HEAT_RAMP_STOPS,
     COLOR_LEGEND_THRESHOLDS: COLOR_LEGEND_THRESHOLDS,
     SIZE_LEGEND_SAMPLES: SIZE_LEGEND_SAMPLES,
+    LOST_USERS_LEGEND_SAMPLES: LOST_USERS_LEGEND_SAMPLES,
     NETWORKS: NETWORKS,
     SEVERITIES: SEVERITIES,
     CAUSES: CAUSES,

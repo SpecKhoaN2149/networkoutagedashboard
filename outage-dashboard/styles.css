@@ -341,14 +341,34 @@ h3 {
   background: rgba(179, 18, 31, 0.12);
 }
 
-/* Pulsing ring on reportable map bubbles (SVG path from L.circleMarker) */
-.bubble--reportable {
-  stroke: #ff2d3a;
-  stroke-width: 3px;
-  animation: bubble-reportable-pulse 1.3s ease-in-out infinite;
+/* ------------------------------------------------------------------
+ * Velocity pulse on map bubbles (SVG path from L.circleMarker).
+ *
+ * Bubble SIZE and COLOR now both encode CURRENT lost users (impact). The
+ * outage's growth VELOCITY is shown as a pulsing ring instead: the pulse
+ * SPEED (animation-duration) is set inline by map.js from the growth rate
+ * (faster growth -> shorter duration -> faster pulse), while the pulse COLOR
+ * indicates whether the outage is FCC reportable.
+ *
+ *   .bubble-pulse             base: shared timing/iteration (duration inline)
+ *   .bubble-pulse--reportable prominent RED ring (>= 900k, reportable)
+ *   .bubble-pulse--neutral    subtle light ring (below threshold)
+ * ------------------------------------------------------------------ */
+.bubble-pulse {
+  /* animation-duration is set inline per-bubble from the growth rate. */
+  animation-duration: 1.6s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
 }
 
-@keyframes bubble-reportable-pulse {
+/* Reportable: a prominent, clearly RED pulsing ring. */
+.bubble-pulse--reportable {
+  stroke: #ff2d3a;
+  stroke-width: 3px;
+  animation-name: bubble-pulse-reportable;
+}
+
+@keyframes bubble-pulse-reportable {
   0%,
   100% {
     stroke-opacity: 1;
@@ -356,6 +376,69 @@ h3 {
   50% {
     stroke-opacity: 0.25;
   }
+}
+
+/* Non-reportable: a subtle, neutral/light ring at lower opacity so the map
+   does not get too busy. */
+.bubble-pulse--neutral {
+  animation-name: bubble-pulse-neutral;
+}
+
+@keyframes bubble-pulse-neutral {
+  0%,
+  100% {
+    stroke-opacity: 0.65;
+  }
+  50% {
+    stroke-opacity: 0.15;
+  }
+}
+
+/* Legacy class retained for compatibility; the red ring is driven by the
+   .bubble-pulse--reportable scheme above. */
+.bubble--reportable {
+  stroke: #ff2d3a;
+}
+
+/* ------------------------------------------------------------------
+ * On-map "Bubbles | Heatmap" mode toggle (top-right Leaflet control).
+ * Styled like the other overlays; sits top-right so it never overlaps the
+ * bottom-left legend.
+ * ------------------------------------------------------------------ */
+.map-mode-toggle {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel, #12151c);
+  box-shadow: var(--shadow);
+}
+
+.map-mode-toggle__btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  color: var(--text-dim);
+  background: transparent;
+}
+
+.map-mode-toggle__btn + .map-mode-toggle__btn {
+  border-left: 1px solid var(--border);
+}
+
+.map-mode-toggle__btn:hover {
+  color: var(--text);
+}
+
+.map-mode-toggle__btn.is-active {
+  color: #fff;
+  background: var(--accent, #2e6df6);
 }
 
 /* Reportable flag inside the map popup */
@@ -708,6 +791,20 @@ h3 {
 
 .legend__gradient-labels span {
   font-variant-numeric: tabular-nums;
+}
+
+/* Explanatory note describing the velocity pulse encoding. */
+.legend__note {
+  margin-top: 10px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.legend--collapsed .legend__note {
+  display: none;
 }
 
 /* ============================================================

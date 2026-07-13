@@ -271,12 +271,14 @@
 
   /**
    * Resolves the bubble radius for an outage from the shared Size Scale
-   * (growth rate -> radius). Falls back to the min radius bound if the scale
-   * global is somehow unavailable so rendering never throws.
+   * (CURRENT lost users -> radius). Size now reinforces color: both encode the
+   * number of users affected (impact / closeness to the 900k FCC threshold).
+   * Falls back to the min radius bound if the scale global is somehow
+   * unavailable so rendering never throws.
    */
   function radiusFor(outage) {
-    if (SizeScale && typeof SizeScale.radiusForGrowthRate === "function") {
-      return SizeScale.radiusForGrowthRate(outage.growthRatePerMin);
+    if (SizeScale && typeof SizeScale.radiusForLostUsers === "function") {
+      return SizeScale.radiusForLostUsers(outage.currentLostUsers);
     }
     return C.RADIUS_BOUNDS.min;
   }
@@ -409,21 +411,73 @@
       : !!outage && outage.currentLostUsers >= 900000;
   }
 
+  // --- Velocity pulse encoding -------------------------------------------
+  // Growth rate (velocity) is no longer mapped to bubble SIZE (which now
+  // encodes lost users). Instead every bubble gets a pulsing ring whose SPEED
+  // tracks the growth rate: a faster-growing outage pulses faster (shorter
+  // animation-duration). The pulse COLOR indicates reportability — reportable
+  // outages pulse in a prominent red; the rest pulse in a subtle neutral ring.
+  var PULSE_DURATION_MAX_S = 3.0; // slowest pulse (growth at/below domain min)
+  var PULSE_DURATION_MIN_S = 0.6; // fastest pulse (growth at/above domain max)
+  var PULSE_BASE_CLASS = "bubble-pulse";
+  var PULSE_REPORTABLE_CLASS = "bubble-pulse--reportable";
+  var PULSE_NEUTRAL_CLASS = "bubble-pulse--neutral";
+
   /**
-   * Toggles the pulsing "reportable" ring on a marker's SVG path element by
-   * adding/removing the `bubble--reportable` class. Guarded so it is a no-op
-   * when the path element is not present (e.g. under a stubbed Leaflet in tests
-   * or before the marker is added to the DOM).
+   * Maps an outage's growth rate (users/min) to a CSS animation-duration in
+   * seconds. Faster growth -> shorter duration -> faster pulse. The growth rate
+   * is clamped to the shared GROWTH_RATE_DOMAIN before mapping, and the result
+   * interpolates linearly between PULSE_DURATION_MAX_S (slow) and
+   * PULSE_DURATION_MIN_S (fast). Non-finite inputs fall back to the slowest.
+   *
+   * @param {number} growthRatePerMin
+   * @returns {number} animation-duration in seconds.
    */
-  function applyReportableState(marker, outage) {
+  function pulseDurationSeconds(growthRatePerMin) {
+    var domain = C.GROWTH_RATE_DOMAIN || { min: 0, max: 500 };
+    var rate = growthRatePerMin;
+    if (typeof rate !== "number" || !isFinite(rate)) {
+      rate = domain.min;
+    }
+    var clamped = C.clamp ? C.clamp(rate, domain.min, domain.max) : rate;
+    var span = domain.max - domain.min;
+    var t = span > 0 ? (clamped - domain.min) / span : 0;
+    // t = 0 -> slowest (MAX_S), t = 1 -> fastest (MIN_S).
+    return PULSE_DURATION_MAX_S + (PULSE_DURATION_MIN_S - PULSE_DURATION_MAX_S) * t;
+  }
+
+  /**
+   * Applies/updates the velocity pulse on a marker's SVG path element:
+   *   - Ensures the base pulse class is present.
+   *   - Toggles the reportable (red) vs neutral (subtle) variant based on
+   *     whether the outage has crossed the 900k FCC threshold.
+   *   - Sets the CSS animation-duration inline from the growth rate so the
+   *     pulse speed tracks the drifting velocity.
+   * Guarded so it is a no-op when the path element is not present (e.g. under a
+   * stubbed Leaflet in tests, or before the marker is added to the DOM).
+   */
+  function applyPulseState(marker, outage) {
     var path = marker && marker._path;
     if (!path || !path.classList) {
       return;
     }
+    path.classList.add(PULSE_BASE_CLASS);
+    if (reportableFor(outage)) {
+      path.classList.add(PULSE_REPORTABLE_CLASS);
+      path.classList.remove(PULSE_NEUTRAL_CLASS);
+    } else {
+      path.classList.add(PULSE_NEUTRAL_CLASS);
+      path.classList.remove(PULSE_REPORTABLE_CLASS);
+    }
+    // Keep legacy class in sync for any styles/tests that still reference it.
     if (reportableFor(outage)) {
       path.classList.add("bubble--reportable");
     } else {
       path.classList.remove("bubble--reportable");
+    }
+    var durationS = pulseDurationSeconds(outage && outage.growthRatePerMin);
+    if (path.style) {
+      path.style.animationDuration = durationS.toFixed(2) + "s";
     }
   }
 
@@ -435,7 +489,10 @@
       color: BUBBLE_STROKE_COLOR,
       weight: BUBBLE_STROKE_WEIGHT,
       opacity: BUBBLE_STROKE_OPACITY,
-      className: reportableFor(outage) ? "bubble--reportable" : "",
+      className:
+        PULSE_BASE_CLASS +
+        " " +
+        (reportableFor(outage) ? PULSE_REPORTABLE_CLASS : PULSE_NEUTRAL_CLASS),
     });
 
     marker.bindPopup(popupHtml(outage), {
@@ -474,6 +531,9 @@
 
     group.addLayer(marker);
     mapHandle.bubbleLayers[outage.id] = marker;
+    // Now that the marker is added, its SVG _path exists in the DOM: apply the
+    // velocity pulse (speed from growth rate, color from reportable state).
+    applyPulseState(marker, outage);
     return marker;
   }
 
@@ -555,8 +615,9 @@
         // Mutate the existing bubble in place (radius + fill color).
         marker.setRadius(radiusFor(outage));
         marker.setStyle({ fillColor: colorFor(outage) });
-        // Toggle the pulsing reportable ring as the outage crosses 900k.
-        applyReportableState(marker, outage);
+        // Refresh the velocity pulse: speed tracks the drifting growth rate and
+        // color tracks crossing the 900k FCC threshold.
+        applyPulseState(marker, outage);
         // Refresh popup content so details reflect the drifted values.
         marker.setPopupContent(popupHtml(outage));
       } else {
@@ -631,8 +692,8 @@
       if (isAllowed(id)) {
         if (!onMap) {
           group.addLayer(marker);
-          // Re-apply the pulsing ring state now that it is back in the DOM.
-          applyReportableState(marker, marker.__outage);
+          // Re-apply the velocity pulse now that it is back in the DOM.
+          applyPulseState(marker, marker.__outage);
         }
       } else if (onMap) {
         group.removeLayer(marker);
@@ -640,10 +701,220 @@
     }
   }
 
+  // --- Heatmap layer (Leaflet.heat plugin) --------------------------------
+
+  // Heat gradient matching the yellow -> orange -> red dashboard theme.
+  var HEAT_GRADIENT = { 0.0: "#ffe14d", 0.5: "#ff9d2e", 1.0: "#d7191c" };
+  var HEAT_OPTIONS = { radius: 34, blur: 22, maxZoom: 8, minOpacity: 0.35 };
+
+  var FCC_THRESHOLD =
+    (C && C.FCC_REPORT_THRESHOLD) ||
+    (C && C.LOST_USERS_DOMAIN && C.LOST_USERS_DOMAIN.max) ||
+    900000;
+
+  /**
+   * Builds the [lat, lng, intensity] point array the heat layer consumes from
+   * the (already filtered) outage list. Intensity is the outage's lost users
+   * normalized against the 900k FCC threshold, clamped to [0, 1]. Records with
+   * invalid coordinates are skipped (mirrors bubble rendering).
+   *
+   * @param {Array} outages
+   * @returns {Array<Array<number>>}
+   */
+  function buildHeatPoints(outages) {
+    var list = Array.isArray(outages) ? outages : [];
+    var points = [];
+    for (var i = 0; i < list.length; i++) {
+      var o = list[i];
+      if (!o || !C.isValidCoordinate(o.lat, o.lng)) {
+        continue;
+      }
+      var raw = typeof o.currentLostUsers === "number" ? o.currentLostUsers : 0;
+      var intensity = C.clamp ? C.clamp(raw / FCC_THRESHOLD, 0, 1) : raw / FCC_THRESHOLD;
+      points.push([o.lat, o.lng, intensity]);
+    }
+    return points;
+  }
+
+  /**
+   * Hides the bubble layer group by detaching it from the map WITHOUT
+   * destroying markers, so bubbles reappear (with current values) when re-shown.
+   */
+  function hideBubbles(mapHandle) {
+    var group = mapHandle && mapHandle.bubbleGroup;
+    if (group && mapHandle.map && mapHandle.map.hasLayer && mapHandle.map.hasLayer(group)) {
+      mapHandle.map.removeLayer(group);
+    } else if (group && mapHandle.map && mapHandle.map.removeLayer) {
+      // Best-effort even if hasLayer is unavailable on a stub.
+      mapHandle.map.removeLayer(group);
+    }
+  }
+
+  /**
+   * Re-attaches the bubble layer group to the map.
+   */
+  function showBubbles(mapHandle) {
+    var group = ensureBubbleGroup(mapHandle);
+    if (group && mapHandle.map && mapHandle.map.addLayer) {
+      var onMap = mapHandle.map.hasLayer ? mapHandle.map.hasLayer(group) : false;
+      if (!onMap) {
+        mapHandle.map.addLayer(group);
+      }
+    }
+  }
+
+  /**
+   * Shows the heatmap built from the (filtered) outage list and hides the
+   * bubble layer group. Builds the L.heatLayer on first use and reuses it
+   * afterward. No-op (beyond hiding bubbles) if the Leaflet.heat plugin is not
+   * loaded.
+   *
+   * @param {Object} mapHandle
+   * @param {Array} outages - the currently-visible (filtered) outages.
+   */
+  function showHeatmap(mapHandle, outages) {
+    if (!mapHandle || !mapHandle.map) {
+      return;
+    }
+    hideBubbles(mapHandle);
+
+    if (typeof L === "undefined" || typeof L.heatLayer !== "function") {
+      // Plugin unavailable — bubbles are hidden; nothing else to draw.
+      return;
+    }
+
+    var points = buildHeatPoints(outages);
+    if (!mapHandle.heatLayer) {
+      mapHandle.heatLayer = L.heatLayer(
+        points,
+        Object.assign({ gradient: HEAT_GRADIENT }, HEAT_OPTIONS)
+      );
+      mapHandle.heatLayer.addTo(mapHandle.map);
+    } else {
+      if (mapHandle.heatLayer.setLatLngs) {
+        mapHandle.heatLayer.setLatLngs(points);
+      }
+      if (mapHandle.map.hasLayer && !mapHandle.map.hasLayer(mapHandle.heatLayer)) {
+        mapHandle.heatLayer.addTo(mapHandle.map);
+      }
+    }
+  }
+
+  /**
+   * Removes the heat layer from the map and restores the bubble layer group.
+   *
+   * @param {Object} mapHandle
+   */
+  function hideHeatmap(mapHandle) {
+    if (!mapHandle || !mapHandle.map) {
+      return;
+    }
+    if (mapHandle.heatLayer && mapHandle.map.removeLayer) {
+      mapHandle.map.removeLayer(mapHandle.heatLayer);
+    }
+    showBubbles(mapHandle);
+  }
+
+  /**
+   * Rebuilds the heat points from the current (filtered) outage list if the
+   * heat layer is currently on the map. Used on filter change and each live
+   * drift tick while in Heatmap mode. No-op when the heat layer is not active.
+   *
+   * @param {Object} mapHandle
+   * @param {Array} outages
+   */
+  function updateHeatmap(mapHandle, outages) {
+    if (!mapHandle || !mapHandle.map || !mapHandle.heatLayer) {
+      return;
+    }
+    var onMap = mapHandle.map.hasLayer
+      ? mapHandle.map.hasLayer(mapHandle.heatLayer)
+      : true;
+    if (!onMap) {
+      return;
+    }
+    if (mapHandle.heatLayer.setLatLngs) {
+      mapHandle.heatLayer.setLatLngs(buildHeatPoints(outages));
+    }
+  }
+
+  /**
+   * Adds an on-map "Bubbles | Heatmap" toggle control to the top-right corner
+   * (styled to avoid the bottom-left legend). Invokes `onSelect(mode)` with
+   * "bubbles" or "heatmap" whenever the mode changes. Returns the control (or
+   * null if Leaflet controls are unavailable, e.g. under a test stub).
+   *
+   * @param {Object} mapHandle
+   * @param {Function} onSelect - called with the newly-selected mode.
+   * @returns {Object|null}
+   */
+  function addMapModeToggle(mapHandle, onSelect) {
+    if (
+      !mapHandle ||
+      !mapHandle.map ||
+      typeof L === "undefined" ||
+      !L.control ||
+      !L.DomUtil ||
+      typeof document === "undefined"
+    ) {
+      return null;
+    }
+
+    var control = L.control({ position: "topright" });
+    control.onAdd = function () {
+      var container = L.DomUtil.create("div", "map-mode-toggle");
+      container.setAttribute("role", "group");
+      container.setAttribute("aria-label", "Map display mode");
+
+      var modes = [
+        { key: "bubbles", label: "Bubbles" },
+        { key: "heatmap", label: "Heatmap" },
+      ];
+
+      var buttons = {};
+      modes.forEach(function (m) {
+        var btn = L.DomUtil.create("button", "map-mode-toggle__btn", container);
+        btn.type = "button";
+        btn.textContent = m.label;
+        btn.setAttribute("data-mode", m.key);
+        if (m.key === "bubbles") {
+          btn.classList.add("is-active");
+        }
+        buttons[m.key] = btn;
+        btn.addEventListener("click", function (evt) {
+          evt.preventDefault();
+          evt.stopPropagation();
+          Object.keys(buttons).forEach(function (k) {
+            buttons[k].classList.toggle("is-active", k === m.key);
+          });
+          if (typeof onSelect === "function") {
+            onSelect(m.key);
+          }
+        });
+      });
+
+      // Prevent map drag/zoom when interacting with the control.
+      if (L.DomEvent) {
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+      }
+      return container;
+    };
+    control.addTo(mapHandle.map);
+    mapHandle.modeToggle = control;
+    return control;
+  }
+
   var api = {
     initMap: initMap,
     renderOutages: renderOutages,
     updateOutages: updateOutages,
+    // Heatmap mode (Leaflet.heat): build heat points from the filtered list.
+    showHeatmap: showHeatmap,
+    hideHeatmap: hideHeatmap,
+    updateHeatmap: updateHeatmap,
+    // On-map "Bubbles | Heatmap" toggle control.
+    addMapModeToggle: addMapModeToggle,
     // Toggle bubble visibility by allowed outage-id set WITHOUT destroying
     // markers (shared filter drives this from app.js).
     applyVisibility: applyVisibility,
