@@ -120,20 +120,45 @@
         fmt(THRESHOLD) +
         "-user FCC reporting threshold.</div>";
     } else {
-      var rows = list
+      // Render each reportable outage as a card with a wrapping stat grid
+      // (instead of a wide table) so the modal never scrolls left/right.
+      function stat(label, value, cls) {
+        return (
+          '<div class="report-stat">' +
+          '<span class="report-stat__label">' +
+          label +
+          "</span>" +
+          '<span class="report-stat__value' +
+          (cls ? " " + cls : "") +
+          '">' +
+          value +
+          "</span>" +
+          "</div>"
+        );
+      }
+
+      var cards = list
         .map(function (o) {
           var over = Math.max(0, o.currentLostUsers - THRESHOLD);
           return (
-            "<tr>" +
-            "<td>" + escapeHtml(o.name) + "</td>" +
-            "<td>" + escapeHtml(o.region) + "</td>" +
-            '<td class="num">' + fmt(o.currentLostUsers) + "</td>" +
-            '<td class="num over">+' + fmt(over) + "</td>" +
-            '<td class="num">' + fmt(o.growthRatePerMin) + "</td>" +
-            "<td>" + formatTime(o.thresholdReachedAt) + "</td>" +
-            '<td class="num">' + escapeHtml(impactText(impactFor(o))) + "</td>" +
-            "<td>" + formatTime(o.startedAt) + "</td>" +
-            "</tr>"
+            '<div class="report-card">' +
+            '<div class="report-card__head">' +
+            '<span class="report-card__name">' +
+            escapeHtml(o.name) +
+            "</span>" +
+            '<span class="report-card__region">' +
+            escapeHtml(o.region) +
+            "</span>" +
+            "</div>" +
+            '<div class="report-card__stats">' +
+            stat("Lost users", fmt(o.currentLostUsers)) +
+            stat("Over 900k", "+" + fmt(over), "over") +
+            stat("Growth /min", fmt(o.growthRatePerMin)) +
+            stat("Threshold reached" + tip(THRESHOLD_TIP), formatTime(o.thresholdReachedAt)) +
+            stat("Impact" + tip(IMPACT_TIP), escapeHtml(impactText(impactFor(o)))) +
+            stat("Started", formatTime(o.startedAt)) +
+            "</div>" +
+            "</div>"
           );
         })
         .join("");
@@ -144,16 +169,9 @@
         " reportable outage" +
         (list.length === 1 ? "" : "s") +
         "</div>" +
-        '<table class="report-table">' +
-        "<thead><tr>" +
-        "<th>Outage</th><th>Region</th>" +
-        "<th>Lost users</th><th>Over 900k</th><th>Growth /min</th>" +
-        "<th>Threshold reached" + tip(THRESHOLD_TIP) + "</th>" +
-        "<th>Impact" + tip(IMPACT_TIP) + "</th>" +
-        "<th>Started</th>" +
-        "</tr></thead><tbody>" +
-        rows +
-        "</tbody></table>";
+        '<div class="report-cards">' +
+        cards +
+        "</div>";
     }
 
     var actions =

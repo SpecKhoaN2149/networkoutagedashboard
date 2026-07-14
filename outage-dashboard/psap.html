@@ -6,9 +6,9 @@
     <title>Spectrum — PSAP / 911 Status</title>
 
     <!-- Shared dashboard styles (PSAP-page styles live here too) -->
-    <link rel="stylesheet" href="styles.css?v=9" />
+    <link rel="stylesheet" href="styles.css?v=13" />
     <!-- Theme init (applied before paint to avoid a flash of the wrong theme) -->
-    <script src="theme.js?v=9"></script>
+    <script src="theme.js?v=13"></script>
   </head>
   <body>
     <div class="app app--page">
@@ -21,7 +21,7 @@
           <span class="header__subtitle">PSAP / 911 Status</span>
         </div>
         <div class="header__meta">
-          <a class="header__nav-link" href="index.html?v=9">&larr; Back to dashboard</a>
+          <a class="header__nav-link" href="index.html?v=13">&larr; Back to dashboard</a>
           <div class="header__updated">
             Last updated:
             <span class="header__updated-value" id="last-updated">—</span>
@@ -33,8 +33,8 @@
       <!-- Management-view subtitle: this page lets an operator move PSAPs
            between reporting statuses (persisted client-side in localStorage). -->
       <p class="page-subtitle" id="psap-subtitle">
-        Manage PSAP / 911 notification status — change a status below to update
-        it (saved in your browser).
+        Manage PSAP / 911 notification status — click a PSAP row to open its
+        management panel and change its status (saved in your browser).
       </p>
 
       <!-- Summary counts by status -->
@@ -71,12 +71,12 @@
          Scripts (no Leaflet needed on this page). Plain <script> tags,
          no ES module imports.
          ============================================================ -->
-    <script src="constants.js?v=9"></script>
-    <script src="infoTip.js?v=9"></script>
-    <script src="mockData.js?v=9"></script>
-    <script src="psapData.js?v=9"></script>
-    <script src="filters.js?v=9"></script>
-    <script src="header.js?v=9"></script>
-    <script src="psapPage.js?v=9"></script>
+    <script src="constants.js?v=13"></script>
+    <script src="infoTip.js?v=13"></script>
+    <script src="mockData.js?v=13"></script>
+    <script src="psapData.js?v=13"></script>
+    <script src="filters.js?v=13"></script>
+    <script src="header.js?v=13"></script>
+    <script src="psapPage.js?v=13"></script>
   </body>
 </html>

@@ -1117,38 +1117,75 @@ h3 {
   padding: 12px 0;
 }
 
-.report-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+/* Reportable outages rendered as stacked cards with a wrapping stat grid so
+ * the modal never needs horizontal scrolling. */
+.report-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
-.report-table th {
-  text-align: left;
-  font-size: 11px;
+.report-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid #b3121f;
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel-2);
+  padding: 12px 14px;
+}
+
+.report-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.report-card__name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.report-card__region {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.report-card__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px 14px;
+}
+
+.report-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.report-stat__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-muted);
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
 }
 
-.report-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border-soft);
-  vertical-align: middle;
-}
-
-.report-table .num {
-  text-align: right;
+.report-stat__value {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  font-size: 14px;
+  color: var(--text);
+  word-break: break-word;
 }
 
-.report-table .over {
+.report-stat__value.over {
   color: #ff6b81;
   font-weight: 600;
 }
@@ -1529,27 +1566,104 @@ h3 {
   color: var(--accent);
 }
 
-/* Per-row Status management control: badge + status <select>. */
-.psap-status-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* Clickable PSAP rows: the whole row opens the management modal. */
+.psap-row {
+  cursor: pointer;
+  transition: background-color 0.12s ease;
 }
 
-.psap-status-select {
-  appearance: auto;
-  cursor: pointer;
+.psap-row:hover {
+  background: var(--bg-elevated);
+}
+
+.psap-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* PSAP management modal — detail rows (label / value pairs). */
+.psap-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 16px;
+}
+
+.psap-detail__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.psap-detail__row:last-child {
+  border-bottom: none;
+}
+
+.psap-detail__label {
   font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+}
+
+.psap-detail__value {
+  font-size: 14px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Segmented status control inside the modal. */
+.psap-status-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.psap-status-option {
+  appearance: none;
+  cursor: pointer;
+  flex: 1 1 auto;
+  min-width: 120px;
+  padding: 9px 12px;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 3px 6px;
+  transition: border-color 0.12s ease, background-color 0.12s ease,
+    color 0.12s ease;
 }
 
-.psap-status-select:hover,
-.psap-status-select:focus {
+.psap-status-option:hover {
   border-color: var(--accent);
+}
+
+.psap-status-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.psap-status-option.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #06121f;
+}
+
+.psap-modal__hint {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.psap-modal__header {
+  background: linear-gradient(135deg, #123a5e, #1d5f92);
 }
 
 .psap-summary {
@@ -1835,7 +1949,18 @@ h3 {
   font-family: var(--font);
   font-size: 13px;
   padding: 6px 10px;
-  transition: border-color 0.12s ease;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* Custom chevron for native selects (removes the default OS arrow). */
+.filter-bar__select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a95a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  cursor: pointer;
 }
 
 .filter-bar__search {
@@ -1846,10 +1971,63 @@ h3 {
   color: var(--text-dim);
 }
 
+.filter-bar__select:hover,
+.filter-bar__search:hover {
+  border-color: var(--border-strong, var(--accent));
+}
+
 .filter-bar__select:focus,
 .filter-bar__search:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(53, 192, 255, 0.18);
+}
+
+/* ------------------------------------------------------------------
+ * Per-column table filters (dashboard + PSAP tables). These live in a
+ * dedicated filter row under the header and were previously unstyled
+ * (default browser look). Match the filter-bar controls.
+ * ------------------------------------------------------------------ */
+.col-filter {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 5px 8px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.col-filter::placeholder {
+  color: var(--text-dim);
+}
+
+.col-filter--select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 26px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a95a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  cursor: pointer;
+}
+
+.col-filter:hover {
+  border-color: var(--border-strong, var(--accent));
+}
+
+.col-filter:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(53, 192, 255, 0.18);
+}
+
+/* Clear ("x") button on search-type column filters — keep it subtle. */
+.col-filter[type="search"]::-webkit-search-cancel-button {
+  cursor: pointer;
 }
 
 .filter-bar__check {

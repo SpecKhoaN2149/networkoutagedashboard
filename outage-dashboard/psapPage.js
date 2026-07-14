@@ -130,39 +130,223 @@
     );
   }
 
+  // ------------------------------------------------------------------
+  // PSAP management modal (click a row to open). Editing the status now
+  // happens here rather than inline in the table, so the table stays a
+  // clean read-only overview. Mirrors the FCC ReportModal dismiss pattern
+  // (close button, backdrop click, Escape).
+  // ------------------------------------------------------------------
+  var MODAL_ID = "psap-modal";
+  var MODAL_BODY_ID = "psap-modal-body";
+  var MODAL_TITLE_ID = "psap-modal-title";
+  var MODAL_CLOSE_ID = "psap-modal-close";
+
+  // Id of the PSAP currently shown in the modal (null when closed).
+  var currentModalPsapId = null;
+
   /**
-   * Builds the per-row management control for the Status column: a status badge
-   * (for quick visual scanning) plus a <select> of the four statuses defaulting
-   * to the PSAP's current status. Changing it calls PsapData.setPsapStatus.
-   * The select carries data-psap-status-select + data-psap-id so the delegated
-   * change handler on the table can identify which PSAP to update.
+   * Builds (once) the modal overlay + dialog shell and appends it to <body>.
+   * The body is populated per-open by populateModal(). Returns the overlay
+   * element, or null when there is no document.
    */
-  function statusControlHtml(psap) {
-    var current = psap.status || "pending";
-    var options = STATUS_ORDER.map(function (status) {
+  function ensureModal() {
+    if (typeof document === "undefined") {
+      return null;
+    }
+    var existing = document.getElementById(MODAL_ID);
+    if (existing) {
+      return existing;
+    }
+    var overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.id = MODAL_ID;
+    overlay.hidden = true;
+    overlay.innerHTML =
+      '<div class="modal psap-modal" role="dialog" aria-modal="true" ' +
+      'aria-labelledby="' +
+      MODAL_TITLE_ID +
+      '">' +
+      '<div class="modal__header psap-modal__header">' +
+      '<h2 class="modal__title" id="' +
+      MODAL_TITLE_ID +
+      '">Manage PSAP</h2>' +
+      '<button class="modal__close" id="' +
+      MODAL_CLOSE_ID +
+      '" type="button" aria-label="Close">\u00d7</button>' +
+      "</div>" +
+      '<div class="modal__body" id="' +
+      MODAL_BODY_ID +
+      '"></div>' +
+      "</div>";
+    document.body.appendChild(overlay);
+
+    // Dismiss controls: close button, backdrop click, Escape.
+    var closeBtn = document.getElementById(MODAL_CLOSE_ID);
+    if (closeBtn) {
+      closeBtn.addEventListener("click", closePsapModal);
+    }
+    overlay.addEventListener("click", function (evt) {
+      if (evt.target === overlay) {
+        closePsapModal();
+      }
+    });
+    // Delegated status-change: the segmented status buttons carry
+    // data-set-status; clicking one writes the override and refreshes.
+    overlay.addEventListener("click", function (evt) {
+      var btn = evt.target && evt.target.closest
+        ? evt.target.closest("[data-set-status]")
+        : null;
+      if (!btn) {
+        return;
+      }
+      var status = btn.getAttribute("data-set-status");
+      var PsapData = global.PsapData;
+      if (
+        !currentModalPsapId ||
+        !status ||
+        !PsapData ||
+        typeof PsapData.setPsapStatus !== "function"
+      ) {
+        return;
+      }
+      try {
+        PsapData.setPsapStatus(currentModalPsapId, status);
+      } catch (e) {
+        /* invalid status — ignore in this mockup */
+        return;
+      }
+      // Re-render the page (summary counts + table) then refresh the modal
+      // so the active status button + last-updated reflect the change.
+      render();
+      populateModal(currentModalPsapId);
+    });
+    return overlay;
+  }
+
+  // Bind Escape once at module load (safe even before the modal exists).
+  if (typeof document !== "undefined") {
+    document.addEventListener("keydown", function (evt) {
+      if (evt.key === "Escape" && currentModalPsapId) {
+        closePsapModal();
+      }
+    });
+  }
+
+  /**
+   * Builds the segmented status control shown inside the modal: one button per
+   * status, with the PSAP's current status highlighted (.is-active).
+   */
+  function statusOptionsHtml(current) {
+    var active = current || "pending";
+    var buttons = STATUS_ORDER.map(function (status) {
       return (
-        '<option value="' +
+        '<button type="button" class="psap-status-option psap-status-option--' +
+        escapeHtml(status) +
+        (status === active ? " is-active" : "") +
+        '" data-set-status="' +
         escapeHtml(status) +
         '"' +
-        (status === current ? " selected" : "") +
+        (status === active ? ' aria-pressed="true"' : ' aria-pressed="false"') +
         ">" +
         escapeHtml(statusLabel(status)) +
-        "</option>"
+        "</button>"
       );
     }).join("");
-    return (
-      '<div class="psap-status-cell">' +
-      statusBadgeHtml(current) +
-      '<select class="psap-status-select" data-psap-status-select ' +
-      'data-psap-id="' +
-      escapeHtml(psap.id) +
-      '" aria-label="Set status for ' +
-      escapeHtml(psap.name) +
-      '">' +
-      options +
-      "</select>" +
-      "</div>"
-    );
+    return '<div class="psap-status-options" role="group" aria-label="Set PSAP status">' + buttons + "</div>";
+  }
+
+  /**
+   * Finds the joined row (PSAP + linked outage) for a given PSAP id from the
+   * cached full set.
+   */
+  function findRow(psapId) {
+    for (var i = 0; i < allRows.length; i++) {
+      if (allRows[i].psap && allRows[i].psap.id === psapId) {
+        return allRows[i];
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Populates the modal body + title for a given PSAP id. Safe to call when the
+   * modal is closed (it just fills the DOM).
+   */
+  function populateModal(psapId) {
+    if (typeof document === "undefined") {
+      return;
+    }
+    var row = findRow(psapId);
+    if (!row) {
+      return;
+    }
+    var psap = row.psap;
+    var outage = row.outage;
+    var title = document.getElementById(MODAL_TITLE_ID);
+    if (title) {
+      title.textContent = psap.name;
+    }
+    var body = document.getElementById(MODAL_BODY_ID);
+    if (!body) {
+      return;
+    }
+
+    function detailRow(label, value) {
+      return (
+        '<div class="psap-detail__row">' +
+        '<span class="psap-detail__label">' +
+        escapeHtml(label) +
+        "</span>" +
+        '<span class="psap-detail__value">' +
+        value +
+        "</span>" +
+        "</div>"
+      );
+    }
+
+    var details =
+      '<div class="psap-detail">' +
+      detailRow("County / State", escapeHtml(psap.county + ", " + psap.state)) +
+      detailRow("Phone", escapeHtml(psap.phone)) +
+      detailRow("Linked outage", escapeHtml(outage ? outage.name : "\u2014")) +
+      detailRow(
+        "Lost users",
+        outage ? formatNumber(outage.currentLostUsers) : "\u2014"
+      ) +
+      detailRow("Current status", statusBadgeHtml(psap.status)) +
+      detailRow("Last updated", formatUpdated(psap.updatedAt)) +
+      "</div>";
+
+    body.innerHTML =
+      details +
+      '<div class="modal__section-title">Set notification status' +
+      tip(PSAP_STATUS_TIP) +
+      "</div>" +
+      statusOptionsHtml(psap.status) +
+      '<p class="psap-modal__hint">Changes are saved in your browser.</p>';
+  }
+
+  /** Opens the management modal for a PSAP id. */
+  function openPsapModal(psapId) {
+    var overlay = ensureModal();
+    if (!overlay) {
+      return;
+    }
+    currentModalPsapId = psapId;
+    populateModal(psapId);
+    overlay.hidden = false;
+  }
+
+  /** Closes the management modal. */
+  function closePsapModal() {
+    currentModalPsapId = null;
+    if (typeof document === "undefined") {
+      return;
+    }
+    var overlay = document.getElementById(MODAL_ID);
+    if (overlay) {
+      overlay.hidden = true;
+    }
   }
 
   /**
@@ -380,7 +564,11 @@
         var outageName = outage ? outage.name : "\u2014";
         var lost = outage ? formatNumber(outage.currentLostUsers) : "\u2014";
         return (
-          "<tr>" +
+          '<tr class="psap-row" data-psap-id="' +
+          escapeHtml(psap.id) +
+          '" role="button" tabindex="0" aria-label="Manage ' +
+          escapeHtml(psap.name) +
+          '">' +
           '<td class="psap-name">' +
           escapeHtml(psap.name) +
           "</td>" +
@@ -394,7 +582,7 @@
           lost +
           "</td>" +
           "<td>" +
-          statusControlHtml(psap) +
+          statusBadgeHtml(psap.status) +
           "</td>" +
           '<td class="psap-phone">' +
           escapeHtml(psap.phone) +
@@ -485,32 +673,22 @@
   }
 
   /**
-   * Handles a per-row Status <select> change: writes the override via
-   * PsapData.setPsapStatus (which stamps updatedAt = now), then re-renders the
-   * whole page so the summary counts, the row's "last updated", and the table
-   * (still narrowed by the active per-column filters) all reflect the change.
+   * Resolves the PSAP id for an event that originated inside a clickable table
+   * row (`tr.psap-row`). Returns null for clicks on the header / filter row so
+   * those interactions stay safe.
    */
-  function onStatusSelectChange(evt) {
+  function rowPsapIdFromEvent(evt) {
     var t = evt.target;
-    if (!t || !t.getAttribute || t.getAttribute("data-psap-status-select") === null) {
-      return;
+    if (!t || !t.closest) {
+      return null;
     }
-    var psapId = t.getAttribute("data-psap-id");
-    var status = t.value;
-    var PsapData = global.PsapData;
-    if (!psapId || !PsapData || typeof PsapData.setPsapStatus !== "function") {
-      return;
+    // Ignore clicks on the filter controls (they live in a thead row, but be
+    // defensive in case markup changes).
+    if (t.closest("[data-col-filter]")) {
+      return null;
     }
-    try {
-      PsapData.setPsapStatus(psapId, status);
-    } catch (e) {
-      /* invalid status — ignore in this mockup */
-      return;
-    }
-    // Re-render from the merged (override-applied) data. This refreshes the
-    // summary counts and the row's last-updated timestamp, and re-applies the
-    // current per-column filters + sorting.
-    render();
+    var tr = t.closest("tr.psap-row");
+    return tr ? tr.getAttribute("data-psap-id") : null;
   }
 
   function init() {
@@ -531,9 +709,26 @@
         }
         table.addEventListener("input", onColumnFilterChange);
         table.addEventListener("change", onColumnFilterChange);
-        // Per-row status management control (delegated so it survives
-        // tbody re-renders on each edit).
-        table.addEventListener("change", onStatusSelectChange);
+
+        // Click a row to open its management modal (delegated so it survives
+        // tbody re-renders). Header / filter-row clicks resolve to null.
+        table.addEventListener("click", function (evt) {
+          var psapId = rowPsapIdFromEvent(evt);
+          if (psapId) {
+            openPsapModal(psapId);
+          }
+        });
+        // Keyboard access: Enter / Space on a focused row opens the modal.
+        table.addEventListener("keydown", function (evt) {
+          if (evt.key !== "Enter" && evt.key !== " " && evt.key !== "Spacebar") {
+            return;
+          }
+          var psapId = rowPsapIdFromEvent(evt);
+          if (psapId) {
+            evt.preventDefault();
+            openPsapModal(psapId);
+          }
+        });
       }
 
       // Wire the "Reset to defaults" button: clears all overrides and re-renders.
