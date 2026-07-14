@@ -8,9 +8,9 @@
     <!-- Vendored Leaflet stylesheet (local copy, no CDN required) -->
     <link rel="stylesheet" href="lib/leaflet.css" />
     <!-- Dashboard styles: all layout + component classes defined up front -->
-    <link rel="stylesheet" href="styles.css?v=13" />
+    <link rel="stylesheet" href="styles.css?v=16" />
     <!-- Theme init (applied before paint to avoid a flash of the wrong theme) -->
-    <script src="theme.js?v=13"></script>
+    <script src="theme.js?v=16"></script>
   </head>
   <body>
     <div class="app">
@@ -26,14 +26,19 @@
           <span class="header__subtitle">Outage Operations</span>
         </div>
         <div class="header__meta">
-          <a class="header__nav-link" href="psap.html?v=13">PSAP / 911 Status &rarr;</a>
-          <div class="header__updated">
-            Last updated:
-            <span class="header__updated-value" id="last-updated">—</span>
+          <a class="header__nav-link" href="psap.html?v=16">PSAP / 911 Status &rarr;</a>
+          <div class="header__status">
+            <span class="live-indicator is-active" id="live-indicator">
+              <span class="live-indicator__dot"></span>
+              <span class="live-indicator__label">Live</span>
+            </span>
+            <span class="header__updated">
+              Updated <span class="header__updated-value" id="last-updated">—</span>
+            </span>
           </div>
-          <div class="live-indicator is-active" id="live-indicator">
-            <span class="live-indicator__dot"></span>
-            <span class="live-indicator__label">Live</span>
+          <div class="demo-controls" id="demo-controls">
+            <button class="demo-btn" id="demo-start" type="button" title="Reset to a clean state and run a scripted outage that grows past the 900k FCC threshold">Start demo</button>
+            <button class="demo-btn demo-btn--ghost" id="demo-exit" type="button" title="Exit the demo and return to the live view" hidden>Exit demo</button>
           </div>
           <button class="theme-toggle" id="theme-toggle" type="button" title="Toggle light / dark theme" aria-label="Toggle light / dark theme">🌙</button>
         </div>
@@ -100,8 +105,10 @@
               <span>Map tiles unavailable — showing outages over a blank base layer</span>
             </div>
 
-            <!-- Legend overlay (rendered by legendView.js — task 11.1) -->
-            <div class="legend legend--overlay" id="legend" aria-label="Map legend">
+            <!-- Legend overlay (rendered by legendView.js — task 11.1).
+                 Starts collapsed to a compact bar; peeks open on hover and can
+                 be pinned open with the toggle. -->
+            <div class="legend legend--overlay legend--collapsed" id="legend" aria-label="Map legend">
               <!-- Legend size samples + color gradient injected here -->
             </div>
           </div>
@@ -166,35 +173,38 @@
     <!-- Vendored Leaflet library (local copy, no CDN required) -->
     <script src="lib/leaflet.js"></script>
     <!-- Vendored Leaflet.heat plugin (adds L.heatLayer; local copy) -->
-    <script src="lib/leaflet-heat.js?v=13"></script>
+    <script src="lib/leaflet-heat.js?v=16"></script>
 
     <!-- Shared constants + validation helpers (task 1.1) -->
-    <script src="constants.js?v=13"></script>
+    <script src="constants.js?v=16"></script>
 
     <!-- Reusable info-tooltip helper (loaded before the view modules) -->
-    <script src="infoTip.js?v=13"></script>
+    <script src="infoTip.js?v=16"></script>
 
     <!-- Pure logic modules (tasks 2–7) -->
-    <script src="mockData.js?v=13"></script>
-    <script src="psapData.js?v=13"></script>
-    <script src="summary.js?v=13"></script>
-    <script src="sizeScale.js?v=13"></script>
-    <script src="colorScale.js?v=13"></script>
-    <script src="legend.js?v=13"></script>
-    <script src="drift.js?v=13"></script>
-    <script src="filters.js?v=13"></script>
+    <script src="mockData.js?v=16"></script>
+    <script src="psapData.js?v=16"></script>
+    <script src="summary.js?v=16"></script>
+    <script src="sizeScale.js?v=16"></script>
+    <script src="colorScale.js?v=16"></script>
+    <script src="legend.js?v=16"></script>
+    <script src="drift.js?v=16"></script>
+    <script src="filters.js?v=16"></script>
     <!-- Impact metric (line-minutes) for reportable outages -->
-    <script src="impact.js?v=13"></script>
+    <script src="impact.js?v=16"></script>
 
     <!-- Map + view/component modules (tasks 9–15) -->
-    <script src="map.js?v=13"></script>
-    <script src="legendView.js?v=13"></script>
-    <script src="outageTable.js?v=13"></script>
-    <script src="detailPanel.js?v=13"></script>
-    <script src="header.js?v=13"></script>
-    <script src="reportModal.js?v=13"></script>
+    <script src="map.js?v=16"></script>
+    <script src="legendView.js?v=16"></script>
+    <script src="outageTable.js?v=16"></script>
+    <script src="detailPanel.js?v=16"></script>
+    <script src="header.js?v=16"></script>
+    <script src="reportModal.js?v=16"></script>
+
+    <!-- Scripted live-demo scenario (loaded before the entry point) -->
+    <script src="demo.js?v=16"></script>
 
     <!-- Entry point — wires everything together + starts live drift (task 16) -->
-    <script src="app.js?v=13"></script>
+    <script src="app.js?v=16"></script>
   </body>
 </html>

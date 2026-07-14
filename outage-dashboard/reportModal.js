@@ -28,6 +28,36 @@
 
   var THRESHOLD = (C && C.FCC_REPORT_THRESHOLD) || 900000;
 
+  // Human-readable PSAP status labels (mirrors psapData.js statuses).
+  var PSAP_STATUS_LABEL = {
+    acknowledged: "Acknowledged",
+    notified: "Notified",
+    pending: "Pending",
+    not_required: "Not required",
+  };
+
+  // The most recent outage list rendered into the modal, so the "Send PSAP
+  // alert" action can re-render the modal in place after updating a status.
+  var lastOutages = [];
+
+  // Optional callback invoked after a PSAP alert is sent, so the host page can
+  // refresh the dashboard (detail panel / table) immediately.
+  var onPsapAlert = null;
+
+  /** Resolves the PSAP linked to an outage, or null. */
+  function psapForOutage(outage) {
+    var PsapData = global.PsapData;
+    if (PsapData && typeof PsapData.getPsapForOutage === "function" && outage) {
+      return PsapData.getPsapForOutage(outage.id);
+    }
+    return null;
+  }
+
+  /** True when a PSAP status counts as "reported" (notified or acknowledged). */
+  function isReported(status) {
+    return status === "notified" || status === "acknowledged";
+  }
+
   function isReportable(o) {
     if (C && typeof C.isReportable === "function") {
       return C.isReportable(o);
@@ -140,6 +170,32 @@
       var cards = list
         .map(function (o) {
           var over = Math.max(0, o.currentLostUsers - THRESHOLD);
+          var psap = psapForOutage(o);
+          var status = psap ? psap.status : null;
+          var reported = isReported(status);
+
+          // PSAP reporting action row: shows whether the affected 911/PSAP has
+          // been notified, with a one-click "Send PSAP alert" when it has not.
+          var psapRow;
+          if (reported) {
+            psapRow =
+              '<div class="report-card__psap">' +
+              '<span class="report-psap report-psap--sent">\u2713 PSAP alert sent' +
+              (psap ? " \u2014 " + escapeHtml(psap.name) : "") +
+              "</span>" +
+              "</div>";
+          } else {
+            psapRow =
+              '<div class="report-card__psap">' +
+              '<span class="report-psap report-psap--pending">\u26A0 Reached 900k \u2014 not yet reported to PSAP</span>' +
+              (psap
+                ? '<button type="button" class="report-psap__btn" data-send-psap="' +
+                  escapeHtml(psap.id) +
+                  '">Send PSAP alert</button>'
+                : "") +
+              "</div>";
+          }
+
           return (
             '<div class="report-card">' +
             '<div class="report-card__head">' +
@@ -156,8 +212,14 @@
             stat("Growth /min", fmt(o.growthRatePerMin)) +
             stat("Threshold reached" + tip(THRESHOLD_TIP), formatTime(o.thresholdReachedAt)) +
             stat("Impact" + tip(IMPACT_TIP), escapeHtml(impactText(impactFor(o)))) +
-            stat("Started", formatTime(o.startedAt)) +
+            stat(
+              "PSAP status",
+              escapeHtml(
+                status ? PSAP_STATUS_LABEL[status] || status : "\u2014"
+              )
+            ) +
             "</div>" +
+            psapRow +
             "</div>"
           );
         })
@@ -201,9 +263,11 @@
    */
   function render(outages) {
     if (!doc) return;
+    // Remember the list so the PSAP action can re-render in place.
+    lastOutages = Array.isArray(outages) ? outages : [];
     var body = doc.getElementById(BODY_ID);
     if (body) {
-      body.innerHTML = bodyHtml(outages);
+      body.innerHTML = bodyHtml(lastOutages);
     }
   }
 
@@ -251,6 +315,35 @@
         close();
       }
     });
+
+    // "Send PSAP alert": persist the linked PSAP status as "notified", then
+    // re-render the modal (and notify the host page) so the change is visible.
+    el.addEventListener("click", function (evt) {
+      var btn =
+        evt.target && evt.target.closest
+          ? evt.target.closest("[data-send-psap]")
+          : null;
+      if (!btn) return;
+      var psapId = btn.getAttribute("data-send-psap");
+      var PsapData = global.PsapData;
+      if (!psapId || !PsapData || typeof PsapData.setPsapStatus !== "function") {
+        return;
+      }
+      try {
+        PsapData.setPsapStatus(psapId, "notified");
+      } catch (e) {
+        return;
+      }
+      // Re-render the modal from the same list so the card now shows "sent".
+      render(lastOutages);
+      if (typeof onPsapAlert === "function") {
+        try {
+          onPsapAlert(psapId);
+        } catch (e2) {
+          /* never let a host callback break the modal */
+        }
+      }
+    });
   }
 
   if (doc) {
@@ -267,5 +360,9 @@
     refresh: refresh,
     isOpen: isOpen,
     render: render,
+    /** Registers a callback fired after a PSAP alert is sent from the modal. */
+    setPsapAlertHandler: function (fn) {
+      onPsapAlert = typeof fn === "function" ? fn : null;
+    },
   };
 })(typeof window !== "undefined" ? window : this);

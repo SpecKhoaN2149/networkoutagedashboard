@@ -480,6 +480,40 @@
     }
   }
 
+  /**
+   * Shows/updates a centered count label inside a bubble when the outage
+   * carries an `aggregateCount` > 1 (used by the live demo: the number of
+   * sub-outages this bubble represents). Implemented as a permanent, centered
+   * Leaflet tooltip. Guarded so it is a no-op under the test's fake Leaflet
+   * (which has no tooltip methods) and for outages without a count.
+   */
+  function updateCountLabel(marker, outage) {
+    if (!marker || typeof marker.bindTooltip !== "function") {
+      return;
+    }
+    var count =
+      outage && typeof outage.aggregateCount === "number"
+        ? outage.aggregateCount
+        : null;
+    var hasTip =
+      typeof marker.getTooltip === "function" ? !!marker.getTooltip() : false;
+
+    if (count && count > 1) {
+      if (hasTip && typeof marker.setTooltipContent === "function") {
+        marker.setTooltipContent(String(count));
+      } else {
+        marker.bindTooltip(String(count), {
+          permanent: true,
+          direction: "center",
+          className: "bubble-count-label",
+          opacity: 1,
+        });
+      }
+    } else if (hasTip && typeof marker.unbindTooltip === "function") {
+      marker.unbindTooltip();
+    }
+  }
+
   function createBubble(mapHandle, group, outage) {
     var marker = L.circleMarker([outage.lat, outage.lng], {
       radius: radiusFor(outage),
@@ -533,6 +567,8 @@
     // Now that the marker is added, its SVG _path exists in the DOM: apply the
     // velocity pulse (speed from growth rate, color from reportable state).
     applyPulseState(marker, outage);
+    // Optional aggregate-count label (live demo).
+    updateCountLabel(marker, outage);
     return marker;
   }
 
@@ -617,6 +653,8 @@
         // Refresh the velocity pulse: speed tracks the drifting growth rate and
         // color tracks crossing the 900k FCC threshold.
         applyPulseState(marker, outage);
+        // Refresh the aggregate-count label (live demo) in place.
+        updateCountLabel(marker, outage);
         // Refresh popup content so details reflect the drifted values.
         marker.setPopupContent(popupHtml(outage));
       } else {

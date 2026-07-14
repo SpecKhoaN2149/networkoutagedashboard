@@ -212,9 +212,11 @@
     // applied to the TABLE ONLY. Read live from the table's filter row.
     var columnFilters = {};
 
-    // Index of PSAP status by outage, so table rows can show/filter the linked
-    // PSAP status. Built once (statuses are static seed data).
-    var psapIndex = (function () {
+    // Builds a fresh index of PSAP status by outage id (and by PSAP id) from
+    // the live PsapData store. Rebuilt on demand so a status change made from
+    // the FCC modal ("Send PSAP alert") or the demo is reflected right away in
+    // the table and detail panel.
+    function buildPsapIndex() {
       var byOutage = {};
       var byPsapId = {};
       var PsapData = ns("PsapData");
@@ -225,13 +227,14 @@
         });
       }
       return { byOutage: byOutage, byPsapId: byPsapId };
-    })();
+    }
 
     /**
-     * Returns copies of the outages annotated with `psapStatus` resolved from
-     * the linked PSAP record (by outage id, falling back to psapId).
+     * Returns copies of the outages annotated with `psapStatus` resolved live
+     * from the linked PSAP record (by outage id, falling back to psapId).
      */
     function annotateWithPsap(list) {
+      var psapIndex = buildPsapIndex();
       return (Array.isArray(list) ? list : []).map(function (o) {
         var status = psapIndex.byOutage[o.id];
         if (!status && o.psapId) {
@@ -463,6 +466,117 @@
           ReportModal.open(outages);
         });
       }
+
+      // When a PSAP alert is sent from the modal, refresh the table + detail
+      // panel so the new "notified" status shows immediately (not just on the
+      // next drift tick).
+      if (typeof ReportModal.setPsapAlertHandler === "function") {
+        ReportModal.setPsapAlertHandler(function () {
+          refreshPsapDependentViews();
+        });
+      }
+    });
+
+    /**
+     * Re-applies the filter (which re-renders the table with live PSAP status)
+     * and refreshes the selected outage's detail panel. Used after a PSAP
+     * status change so all views reflect it right away.
+     */
+    function refreshPsapDependentViews() {
+      applyFilter();
+      if (selectedId !== null) {
+        var current = findOutageById(selectedId);
+        var DetailPanel = ns("DetailPanel");
+        if (DetailPanel && current) {
+          DetailPanel.render(current);
+        }
+        highlightTableRow(selectedId);
+      }
+    }
+
+    // --- Live demo mode ----------------------------------------------------
+    // A scripted, repeatable scenario (see demo.js): resets to a calm baseline
+    // where only one target outage grows, tick by tick, until it crosses the
+    // 900k FCC threshold. Keeps the rest of the map still so a presenter can
+    // narrate a consistent story.
+
+    /**
+     * Full redraw from the current `outages` list. Unlike the per-tick update,
+     * this rebuilds the map bubbles from scratch (so aggregate-count labels
+     * attach/detach cleanly) and refreshes every dependent view.
+     */
+    function fullRenderFromOutages() {
+      summary = computeSummary(outages);
+      safely("MapRenderer.renderOutages (full)", function () {
+        var MapRenderer = ns("MapRenderer");
+        if (MapRenderer && mapHandle) {
+          MapRenderer.renderOutages(mapHandle, outages);
+        }
+      });
+      if (mapMode === "heatmap") {
+        safely("MapRenderer.showHeatmap (full)", function () {
+          var MapRenderer = ns("MapRenderer");
+          if (MapRenderer && MapRenderer.showHeatmap && mapHandle) {
+            MapRenderer.showHeatmap(mapHandle, getFilteredOutages());
+          }
+        });
+      }
+      applyFilter();
+      safely("Header.renderHeader (full)", function () {
+        var Header = ns("Header");
+        if (Header) Header.renderHeader(summary, new Date());
+      });
+      updateFccBanner(outages);
+    }
+
+    function updateDemoButtons(isActive) {
+      if (typeof document === "undefined") return;
+      var startBtn = document.getElementById("demo-start");
+      var exitBtn = document.getElementById("demo-exit");
+      if (startBtn) {
+        startBtn.textContent = isActive ? "Restart demo" : "Start demo";
+      }
+      if (exitBtn) {
+        exitBtn.hidden = !isActive;
+      }
+    }
+
+    function enterDemo() {
+      var Demo = ns("DemoScenario");
+      if (!Demo) return;
+      outages = Demo.start() || outages;
+      selectedId = null;
+      safely("DetailPanel.renderEmpty (demo)", function () {
+        var DetailPanel = ns("DetailPanel");
+        if (DetailPanel) DetailPanel.renderEmpty();
+      });
+      fullRenderFromOutages();
+      updateDemoButtons(true);
+    }
+
+    function exitDemo() {
+      var Demo = ns("DemoScenario");
+      outages =
+        (Demo && Demo.stop()) ||
+        (function () {
+          var MockData = ns("MockData");
+          return MockData ? MockData.getMockOutages() : outages;
+        })();
+      selectedId = null;
+      safely("DetailPanel.renderEmpty (exit demo)", function () {
+        var DetailPanel = ns("DetailPanel");
+        if (DetailPanel) DetailPanel.renderEmpty();
+      });
+      fullRenderFromOutages();
+      updateDemoButtons(false);
+    }
+
+    safely("wire demo controls", function () {
+      if (typeof document === "undefined") return;
+      var startBtn = document.getElementById("demo-start");
+      var exitBtn = document.getElementById("demo-exit");
+      if (startBtn) startBtn.addEventListener("click", enterDemo);
+      if (exitBtn) exitBtn.addEventListener("click", exitDemo);
     });
 
     // --- Wire outage-table row selection -----------------------------------
@@ -558,13 +672,23 @@
     // component refresh below reads from that same `outages` reference so the
     // dashboard stays in sync (Req 12.5).
     function tick() {
-      var Drift = ns("Drift");
-      if (!Drift) return; // No drift module -> dashboard stays on seed data.
+      var Demo = ns("DemoScenario");
+      var next;
 
-      var next = safely("Drift.tickOutages", function () {
-        return Drift.tickOutages(outages);
-      });
-      if (!next) return; // Skip this tick if drift failed; try again next time.
+      if (Demo && Demo.isActive()) {
+        // Scripted demo: advance only the target outage; everything else is
+        // held still so the map stays consistent for the presenter.
+        next = safely("DemoScenario.advance", function () {
+          return Demo.advance();
+        });
+      } else {
+        var Drift = ns("Drift");
+        if (!Drift) return; // No drift module -> dashboard stays on seed data.
+        next = safely("Drift.tickOutages", function () {
+          return Drift.tickOutages(outages);
+        });
+      }
+      if (!next) return; // Skip this tick if drift/advance failed; retry later.
 
       // Commit the single updated list as the new source of truth.
       outages = next;

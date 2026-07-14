@@ -213,12 +213,21 @@ h3 {
 .header__meta {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 14px;
+}
+
+/* Compact status cluster: the live indicator + last-updated time read as a
+ * single "data freshness" group instead of two competing badges. */
+.header__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .header__updated {
   color: var(--text-muted);
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .header__updated .header__updated-value {
@@ -746,6 +755,25 @@ h3 {
   display: none;
 }
 
+/* Peek on hover: a collapsed legend reveals its content while hovered without
+ * pinning it open, so the map stays uncluttered by default. Clicking the
+ * toggle still pins it open/closed (and is the keyboard-accessible path). */
+.legend--overlay.legend--collapsed:hover {
+  cursor: pointer;
+}
+
+.legend--overlay.legend--collapsed:hover .legend__bar {
+  margin-bottom: 10px;
+}
+
+.legend--overlay.legend--collapsed:hover .legend__section {
+  display: block;
+}
+
+.legend--overlay.legend--collapsed:hover .legend__note {
+  display: block;
+}
+
 .legend__section {
   margin-bottom: 12px;
 }
@@ -1190,6 +1218,108 @@ h3 {
   font-weight: 600;
 }
 
+/* PSAP reporting action inside each reportable-outage card. */
+.report-card__psap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.report-psap {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.report-psap--pending {
+  color: #ffb347;
+}
+
+.report-psap--sent {
+  color: var(--live);
+}
+
+.report-psap__btn {
+  appearance: none;
+  cursor: pointer;
+  margin-left: auto;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+  background: #b3121f;
+  border: 1px solid #ff5a68;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.12s ease;
+}
+
+.report-psap__btn:hover {
+  background: #d21524;
+}
+
+/* Live-demo controls in the header. */
+.demo-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The demo trigger is a presenter tool, so it's a quiet outline button that
+ * fills on hover — present but not competing with live data. */
+.demo-btn {
+  appearance: none;
+  cursor: pointer;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.demo-btn:hover {
+  background: var(--accent);
+  color: #06121f;
+}
+
+.demo-btn--ghost {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.demo-btn--ghost:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* Aggregate-count label centered inside a map bubble (live demo). Overrides
+ * the default Leaflet tooltip chrome so only the number shows. */
+.leaflet-tooltip.bubble-count-label {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85), 0 0 3px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.leaflet-tooltip.bubble-count-label::before {
+  display: none;
+}
+
 .report-actions {
   margin: 0;
   padding-left: 18px;
@@ -1244,22 +1374,19 @@ h3 {
  * ============================================================ */
 
 /* Header nav link (dashboard <-> PSAP page) */
+/* Navigation reads as a quiet text link (not a pill) so it doesn't compete
+ * with the demo action button for attention. */
 .header__nav-link {
   color: var(--accent);
   text-decoration: none;
   font-size: 13px;
   font-weight: 600;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-elevated);
   white-space: nowrap;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: color 0.15s ease;
 }
 
 .header__nav-link:hover {
-  border-color: var(--accent);
-  color: var(--text);
+  text-decoration: underline;
 }
 
 /* Vertical stack that fills the height under the header + FCC banner. */
