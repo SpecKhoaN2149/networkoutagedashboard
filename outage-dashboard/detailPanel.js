@@ -8,8 +8,8 @@
  *               record (the key new information this redesign surfaces).
  *
  * The PSAP / 911 section shows a SINGLE status line — the PSAP status badge
- * (Acknowledged / Notified / Pending / Not required) with an info "i" that
- * explains what each status means — alongside the PSAP name and county/state.
+ * (Notified / Not notified) with an info "i" that explains what the status
+ * means — alongside the PSAP name and county/state.
  * (The FCC-reportable badge is shown separately and is based on the 900k
  *  threshold; PSAP notification can happen independently of that flag.)
  *
@@ -32,10 +32,8 @@
 
   // Human-readable label per PSAP status.
   var STATUS_LABEL = {
-    acknowledged: "Acknowledged",
     notified: "Notified",
-    pending: "Pending",
-    not_required: "Not required",
+    not_notified: "Not notified",
   };
 
   function isReportable(outage) {
@@ -119,7 +117,7 @@
   }
 
   function statusBadgeHtml(status) {
-    var key = status || "pending";
+    var key = status || "not_notified";
     var label = STATUS_LABEL[key] || key;
     return (
       '<span class="psap-badge psap-badge--' +
@@ -144,9 +142,8 @@
   // Concise plain-language descriptions surfaced via the "i" tooltips.
   var TIP = {
     psapStatus:
-      "PSAP = the local 911 call center. Acknowledged = PSAP confirmed " +
-      "receipt; Notified = report sent, awaiting acknowledgement; Pending = " +
-      "not yet reported; Not required = below the 900k FCC reporting threshold.",
+      "PSAP = the local 911 call center. Notified = the outage has been " +
+      "reported to the PSAP; Not notified = the PSAP has not been alerted yet.",
     fcc:
       "Outages affecting 900,000 or more users must be reported to the FCC " +
       "(NORS) and the local 911/PSAP authorities.",
@@ -421,7 +418,7 @@
       '<div class="detail-section detail-section--psap">' +
       '<div class="detail-section__title">PSAP / 911</div>' +
       psapBody +
-      '<a class="detail-psap-link" href="psap.html?v=16">View all PSAPs \u2192</a>' +
+      '<a class="detail-psap-link" href="psap.html?v=18">View all PSAPs \u2192</a>' +
       "</div>" +
       "</div>";
 

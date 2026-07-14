@@ -47,20 +47,12 @@
     "DNS/Config error",
   ];
   var SEVERITIES = (C && C.SEVERITIES) || ["critical", "major", "minor"];
-  var PSAP_STATUSES =
-    (C && C.PSAP_STATUSES) || [
-      "acknowledged",
-      "notified",
-      "pending",
-      "not_required",
-    ];
+  var PSAP_STATUSES = (C && C.PSAP_STATUSES) || ["notified", "not_notified"];
 
   // Friendly labels for PSAP status option/badge text.
   var PSAP_STATUS_LABEL = {
-    acknowledged: "Acknowledged",
     notified: "Notified",
-    pending: "Pending",
-    not_required: "Not required",
+    not_notified: "Not notified",
   };
 
   // Column model in display order. `filter` describes the per-column filter

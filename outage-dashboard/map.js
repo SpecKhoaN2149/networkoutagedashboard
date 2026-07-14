@@ -487,14 +487,34 @@
    * Leaflet tooltip. Guarded so it is a no-op under the test's fake Leaflet
    * (which has no tooltip methods) and for outages without a count.
    */
+  /**
+   * Resolves the number of outages a bubble represents. The live demo sets an
+   * explicit `aggregateCount` (which takes precedence); otherwise the count is
+   * derived from `relatedOutageIds` — a primary ticket that groups N related
+   * outages represents N + 1 outages (itself plus its related tickets). Returns
+   * null when the bubble represents a single outage (no label shown).
+   */
+  function countForOutage(outage) {
+    if (!outage) {
+      return null;
+    }
+    if (typeof outage.aggregateCount === "number") {
+      return outage.aggregateCount;
+    }
+    if (
+      Array.isArray(outage.relatedOutageIds) &&
+      outage.relatedOutageIds.length > 0
+    ) {
+      return outage.relatedOutageIds.length + 1;
+    }
+    return null;
+  }
+
   function updateCountLabel(marker, outage) {
     if (!marker || typeof marker.bindTooltip !== "function") {
       return;
     }
-    var count =
-      outage && typeof outage.aggregateCount === "number"
-        ? outage.aggregateCount
-        : null;
+    var count = countForOutage(outage);
     var hasTip =
       typeof marker.getTooltip === "function" ? !!marker.getTooltip() : false;
 
@@ -821,20 +841,19 @@
     }
 
     var points = buildHeatPoints(outages);
-    if (!mapHandle.heatLayer) {
-      mapHandle.heatLayer = L.heatLayer(
-        points,
-        Object.assign({ gradient: HEAT_GRADIENT }, HEAT_OPTIONS)
-      );
-      mapHandle.heatLayer.addTo(mapHandle.map);
-    } else {
-      if (mapHandle.heatLayer.setLatLngs) {
-        mapHandle.heatLayer.setLatLngs(points);
-      }
-      if (mapHandle.map.hasLayer && !mapHandle.map.hasLayer(mapHandle.heatLayer)) {
-        mapHandle.heatLayer.addTo(mapHandle.map);
-      }
+    // Rebuild the heat layer fresh on every show. Reusing a heat layer that was
+    // previously removed from the map leaves the Leaflet.heat plugin in a stale
+    // state where it no longer redraws (bug: heatmap stops working after
+    // toggling bubbles -> heatmap a second time). Recreating avoids that.
+    if (mapHandle.heatLayer && mapHandle.map.removeLayer) {
+      mapHandle.map.removeLayer(mapHandle.heatLayer);
+      mapHandle.heatLayer = null;
     }
+    mapHandle.heatLayer = L.heatLayer(
+      points,
+      Object.assign({ gradient: HEAT_GRADIENT }, HEAT_OPTIONS)
+    );
+    mapHandle.heatLayer.addTo(mapHandle.map);
   }
 
   /**

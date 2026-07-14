@@ -26,6 +26,10 @@
   // that range.
   var TICK_INTERVAL_MS = 3000;
 
+  // While the scripted demo is active the story should move along a bit
+  // quicker, so the timer runs faster than the ambient live-drift cadence.
+  var DEMO_TICK_INTERVAL_MS = 1400;
+
   // Map container id (see index.html: <div id="map">).
   var MAP_CONTAINER_ID = "map";
 
@@ -552,6 +556,8 @@
       });
       fullRenderFromOutages();
       updateDemoButtons(true);
+      // Run the timer faster so the scripted story moves along.
+      startTimer(DEMO_TICK_INTERVAL_MS);
     }
 
     function exitDemo() {
@@ -569,6 +575,8 @@
       });
       fullRenderFromOutages();
       updateDemoButtons(false);
+      // Restore the normal live-drift cadence.
+      startTimer(TICK_INTERVAL_MS);
     }
 
     safely("wire demo controls", function () {
@@ -671,6 +679,20 @@
     // A single repeating timer. Each tick produces ONE updated list and every
     // component refresh below reads from that same `outages` reference so the
     // dashboard stays in sync (Req 12.5).
+    // Handle for the repeating drift/demo timer, so it can be restarted at a
+    // different cadence (normal vs demo).
+    var tickTimerId = null;
+
+    function startTimer(intervalMs) {
+      if (typeof window === "undefined" || !window.setInterval) {
+        return;
+      }
+      if (tickTimerId !== null && window.clearInterval) {
+        window.clearInterval(tickTimerId);
+      }
+      tickTimerId = window.setInterval(tick, intervalMs);
+    }
+
     function tick() {
       var Demo = ns("DemoScenario");
       var next;
@@ -746,10 +768,10 @@
       });
     }
 
-    // Start the single fixed repeating timer (Req 12.1).
-    if (typeof window !== "undefined" && window.setInterval) {
-      window.setInterval(tick, TICK_INTERVAL_MS);
-    }
+    // Start the repeating timer (Req 12.1). Kept in a restartable helper so the
+    // demo can run it at a faster cadence and restore the normal cadence on
+    // exit.
+    startTimer(TICK_INTERVAL_MS);
   }
 
   // Run after the DOM is ready. The script is at the end of <body>, but guard

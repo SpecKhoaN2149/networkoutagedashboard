@@ -82,7 +82,7 @@ describe("setPsapStatus", () => {
 
   it("returns null for an unknown PSAP id", () => {
     expect(
-      PsapData.setPsapStatus("psap-does-not-exist", "acknowledged")
+      PsapData.setPsapStatus("psap-does-not-exist", "notified")
     ).toBeNull();
   });
 });

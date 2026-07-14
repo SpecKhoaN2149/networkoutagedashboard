@@ -1653,6 +1653,11 @@ h3 {
   border-color: var(--sev-major-bd);
 }
 
+.psap-badge--not_notified {
+  background: var(--sev-major-bg);
+  color: var(--sev-major-fg);
+}
+
 .psap-badge--not_required {
   background: var(--bg-elevated);
   color: var(--text-muted);
@@ -1795,7 +1800,7 @@ h3 {
 
 .psap-summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--gap);
 }
 
@@ -1834,6 +1839,10 @@ h3 {
 }
 
 .psap-summary__tile--pending {
+  border-left-color: var(--sev-major-fg);
+}
+
+.psap-summary__tile--not_notified {
   border-left-color: var(--sev-major-fg);
 }
 

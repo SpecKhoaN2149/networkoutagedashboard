@@ -3,10 +3,9 @@
  * Spectrum outage dashboard mockup.
  *
  * Renders two things into psap.html:
- *   - Summary counts by status (Acknowledged / Notified / Pending / Not
- *     required).
+ *   - Summary counts by status (Notified / Not notified).
  *   - A table of all PSAPs joined to their linked outage, sorted so the most
- *     actionable rows (pending, then notified) surface near the top.
+ *     actionable rows (not notified, then notified) surface near the top.
  *
  * Buildless / browser-only: loaded via a plain <script> tag on psap.html and
  * attaches its exports to `window.PsapPage`. It reads window.PsapData and
@@ -20,13 +19,12 @@
   var TABLE_ID = "psap-table";
 
   // Display order for the summary tiles + sort priority (lower = higher up).
-  var STATUS_ORDER = ["pending", "notified", "acknowledged", "not_required"];
+  // "Not notified" is the actionable state, so it surfaces first.
+  var STATUS_ORDER = ["not_notified", "notified"];
 
   var STATUS_LABEL = {
-    acknowledged: "Acknowledged",
     notified: "Notified",
-    pending: "Pending",
-    not_required: "Not required",
+    not_notified: "Not notified",
   };
 
   // Shared constants (status list). Browser global first, Node require fallback
@@ -35,30 +33,18 @@
     (global && global.DashboardConstants) ||
     (typeof require !== "undefined" ? require("./constants") : undefined);
 
-  var PSAP_STATUSES =
-    (C && C.PSAP_STATUSES) || [
-      "acknowledged",
-      "notified",
-      "pending",
-      "not_required",
-    ];
+  var PSAP_STATUSES = (C && C.PSAP_STATUSES) || ["notified", "not_notified"];
 
   var PSAP_STATUS_TIP =
-    "PSAP = the local 911 call center. Acknowledged = PSAP confirmed " +
-    "receipt; Notified = report sent, awaiting acknowledgement; Pending = " +
-    "not yet reported; Not required = below the 900k FCC reporting threshold.";
+    "PSAP = the local 911 call center. Notified = the outage has been " +
+    "reported to the PSAP; Not notified = the PSAP has not been alerted yet.";
 
   // Per-status descriptions for the summary tiles' info "i".
   var STATUS_TIP = {
-    acknowledged:
-      "The PSAP has confirmed receipt of the outage notification.",
     notified:
-      "A report has been sent to the PSAP; awaiting their acknowledgement.",
-    pending:
-      "This outage has not yet been reported to the PSAP.",
-    not_required:
-      "The outage is below the 900k FCC reporting threshold, so no PSAP " +
-      "report is required.",
+      "The outage has been reported to the PSAP / 911 authority.",
+    not_notified:
+      "The PSAP / 911 authority has not been notified of this outage yet.",
   };
 
   /**
@@ -120,7 +106,7 @@
   }
 
   function statusBadgeHtml(status) {
-    var key = status || "pending";
+    var key = status || "not_notified";
     return (
       '<span class="psap-badge psap-badge--' +
       escapeHtml(key) +
@@ -237,7 +223,7 @@
    * status, with the PSAP's current status highlighted (.is-active).
    */
   function statusOptionsHtml(current) {
-    var active = current || "pending";
+    var active = current || "not_notified";
     var buttons = STATUS_ORDER.map(function (status) {
       return (
         '<button type="button" class="psap-status-option psap-status-option--' +
@@ -366,9 +352,9 @@
   }
 
   /**
-   * Joins PSAPs with their linked outage and sorts them so actionable statuses
-   * surface first (pending, then notified, then acknowledged, then
-   * not_required). Ties break by descending linked-outage lost users.
+   * Joins PSAPs with their linked outage and sorts them so the actionable
+   * status surfaces first (not_notified, then notified). Ties break by
+   * descending linked-outage lost users.
    */
   function buildRows() {
     var PsapData = global.PsapData;
@@ -411,7 +397,7 @@
       return;
     }
 
-    var counts = { acknowledged: 0, notified: 0, pending: 0, not_required: 0 };
+    var counts = { notified: 0, not_notified: 0 };
     rows.forEach(function (row) {
       var s = row.psap.status;
       if (counts[s] === undefined) {

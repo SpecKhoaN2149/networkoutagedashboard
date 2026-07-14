@@ -9,10 +9,8 @@
  *
  * Each PSAP corresponds to exactly one seed outage region and carries a
  * reporting `status` used across the detail panel and the PSAP status page:
- *   - "acknowledged" — PSAP has acknowledged the outage report (green)
  *   - "notified"     — the outage has been reported to the PSAP (blue)
- *   - "pending"      — not yet reported / awaiting action (amber/alert)
- *   - "not_required" — outage is below the FCC 900k threshold (grey)
+ *   - "not_notified" — the PSAP has not been notified yet (amber/alert)
  */
 (function (global) {
   "use strict";
@@ -22,12 +20,8 @@
    * into an ISO 8601 `updatedAt` (in the recent past) at call time so the demo
    * always reads as freshly updated regardless of when it is opened.
    *
-   * Status guidance (so the demo reads well against the scaled-up outage
-   * numbers in mockData.js):
-   *   - Dallas (otg-005, ~912k, over the FCC threshold) -> "acknowledged"
-   *   - New York (otg-001, ~712k) & Los Angeles-adjacent highs -> "pending"/"notified"
-   *   - clearly-low outages -> "not_required"
-   * At least one of each status is present for visual variety.
+   * Status guidance: PSAPs that have already been reported to read "notified";
+   * the rest read "not_notified". At least one of each is present for variety.
    */
   var SEED_DEFS = [
     {
@@ -36,7 +30,7 @@
       county: "New York County",
       state: "NY",
       phone: "911 / +1-212-555-0101",
-      status: "pending",
+      status: "not_notified",
       linkedOutageId: "otg-001",
       updatedMinutesAgo: 12,
     },
@@ -46,7 +40,7 @@
       county: "Suffolk County",
       state: "MA",
       phone: "911 / +1-617-555-0102",
-      status: "not_required",
+      status: "not_notified",
       linkedOutageId: "otg-002",
       updatedMinutesAgo: 34,
     },
@@ -56,7 +50,7 @@
       county: "Cook County",
       state: "IL",
       phone: "911 / +1-312-555-0103",
-      status: "not_required",
+      status: "not_notified",
       linkedOutageId: "otg-003",
       updatedMinutesAgo: 27,
     },
@@ -66,7 +60,7 @@
       county: "Hennepin County",
       state: "MN",
       phone: "911 / +1-612-555-0104",
-      status: "not_required",
+      status: "not_notified",
       linkedOutageId: "otg-004",
       updatedMinutesAgo: 41,
     },
@@ -76,7 +70,7 @@
       county: "Dallas County",
       state: "TX",
       phone: "911 / +1-214-555-0105",
-      status: "acknowledged",
+      status: "notified",
       linkedOutageId: "otg-005",
       updatedMinutesAgo: 5,
     },
@@ -86,7 +80,7 @@
       county: "Fulton County",
       state: "GA",
       phone: "911 / +1-404-555-0106",
-      status: "not_required",
+      status: "not_notified",
       linkedOutageId: "otg-006",
       updatedMinutesAgo: 19,
     },
@@ -96,7 +90,7 @@
       county: "Miami-Dade County",
       state: "FL",
       phone: "911 / +1-305-555-0107",
-      status: "not_required",
+      status: "not_notified",
       linkedOutageId: "otg-007",
       updatedMinutesAgo: 23,
     },
@@ -116,7 +110,7 @@
       county: "Maricopa County",
       state: "AZ",
       phone: "911 / +1-602-555-0109",
-      status: "not_required",
+      status: "not_notified",
       linkedOutageId: "otg-009",
       updatedMinutesAgo: 46,
     },
@@ -126,7 +120,7 @@
       county: "King County",
       state: "WA",
       phone: "911 / +1-206-555-0110",
-      status: "pending",
+      status: "not_notified",
       linkedOutageId: "otg-010",
       updatedMinutesAgo: 15,
     },
@@ -144,12 +138,7 @@
 
   // The four allowed reporting statuses. Kept local so this module stays
   // self-contained (and testable under Node/Vitest without other modules).
-  var ALLOWED_STATUSES = [
-    "acknowledged",
-    "notified",
-    "pending",
-    "not_required",
-  ];
+  var ALLOWED_STATUSES = ["notified", "not_notified"];
 
   /**
    * Resolves a browser-like localStorage, preferring a bare `localStorage`
@@ -266,8 +255,7 @@
    * is not one of the four allowed values.
    *
    * @param {string} psapId
-   * @param {string} status - one of "acknowledged" | "notified" | "pending" |
-   *   "not_required".
+   * @param {string} status - one of "notified" | "not_notified".
    * @returns {Object|null}
    */
   function setPsapStatus(psapId, status) {

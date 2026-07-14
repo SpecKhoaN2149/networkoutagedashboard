@@ -13,8 +13,8 @@
  *     count shown inside its bubble climbs (2, 3, 4 ...), its lost-user total
  *     climbs with it, and its color ramps toward red as it approaches 900k.
  *   - CROSS 900k: once the target reaches the threshold it becomes FCC
- *     reportable (the on-map red alert appears) and its linked PSAP flips to
- *     "pending" — reached 900k but NOT yet reported.
+ *     reportable (the on-map red alert appears) while its linked PSAP is still
+ *     "not_notified" — reached 900k but NOT yet reported.
  *   - REPORT: the operator opens the FCC alert and clicks "Send PSAP alert",
  *     which persists the PSAP status as "notified" (reported).
  *
@@ -151,7 +151,7 @@
       var psap = PsapData.getPsapForOutage(TARGET_ID);
       if (psap && typeof PsapData.setPsapStatus === "function") {
         try {
-          PsapData.setPsapStatus(psap.id, "not_required");
+          PsapData.setPsapStatus(psap.id, "not_notified");
         } catch (e) {
           /* ignore */
         }
@@ -172,9 +172,10 @@
 
   /**
    * Advances the scenario by one step: the target aggregates one more outage
-   * (until MAX_COUNT), and the first time it reaches the threshold its linked
-   * PSAP is flipped to "pending" (reached 900k, not yet reported). Returns the
-   * updated outage list, or null when not active.
+   * (until MAX_COUNT). The first time it reaches the threshold its linked PSAP
+   * is ensured "not_notified" (reached 900k, awaiting reporting) so the
+   * operator can send the alert from the FCC modal. Returns the updated outage
+   * list, or null when not active.
    */
   function advance() {
     if (!active) {
@@ -191,7 +192,7 @@
     }
 
     if (justCrossed) {
-      // Reached the FCC threshold but not yet reported -> PSAP "pending".
+      // Reached the FCC threshold but not yet reported -> PSAP "not_notified".
       // Do NOT clobber a status the operator may have already advanced.
       var PsapData = ns("PsapData");
       if (PsapData && typeof PsapData.getPsapForOutage === "function") {
@@ -199,11 +200,10 @@
         if (
           psap &&
           psap.status !== "notified" &&
-          psap.status !== "acknowledged" &&
           typeof PsapData.setPsapStatus === "function"
         ) {
           try {
-            PsapData.setPsapStatus(psap.id, "pending");
+            PsapData.setPsapStatus(psap.id, "not_notified");
           } catch (e) {
             /* ignore invalid status */
           }

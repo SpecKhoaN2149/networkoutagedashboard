@@ -30,10 +30,8 @@
 
   // Human-readable PSAP status labels (mirrors psapData.js statuses).
   var PSAP_STATUS_LABEL = {
-    acknowledged: "Acknowledged",
     notified: "Notified",
-    pending: "Pending",
-    not_required: "Not required",
+    not_notified: "Not notified",
   };
 
   // The most recent outage list rendered into the modal, so the "Send PSAP
@@ -53,9 +51,9 @@
     return null;
   }
 
-  /** True when a PSAP status counts as "reported" (notified or acknowledged). */
+  /** True when a PSAP status counts as "reported" (notified). */
   function isReported(status) {
-    return status === "notified" || status === "acknowledged";
+    return status === "notified";
   }
 
   function isReportable(o) {

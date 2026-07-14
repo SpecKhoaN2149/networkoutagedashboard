@@ -111,8 +111,9 @@
   ];
 
   // Allowed PSAP reporting statuses. Mirrors psapData.js status values and
-  // powers the per-column PSAP status filters on both tables.
-  var PSAP_STATUSES = ["acknowledged", "notified", "pending", "not_required"];
+  // powers the per-column PSAP status filters on both tables. Simplified to a
+  // binary: an outage's PSAP has either been notified or it has not.
+  var PSAP_STATUSES = ["notified", "not_notified"];
 
   /**
    * Returns true if `lat`/`lng` are finite numbers within absolute geographic
