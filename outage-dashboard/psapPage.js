@@ -308,8 +308,7 @@
       '<div class="modal__section-title">Set notification status' +
       tip(PSAP_STATUS_TIP) +
       "</div>" +
-      statusOptionsHtml(psap.status) +
-      '<p class="psap-modal__hint">Changes are saved in your browser.</p>';
+      statusOptionsHtml(psap.status);
   }
 
   /** Opens the management modal for a PSAP id. */
