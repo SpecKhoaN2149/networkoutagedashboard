@@ -105,6 +105,22 @@
     return STATUS_LABEL[status] || status || "\u2014";
   }
 
+  /**
+   * Resolves a readable "threshold reached" label for a linked outage: the
+   * time it crossed the 900k user-minute FCC threshold, or "Not yet reached"
+   * when it has not. Returns a dash when there is no linked outage.
+   */
+  function thresholdReachedLabel(outage) {
+    if (!outage) {
+      return "\u2014";
+    }
+    var iso = outage.thresholdReachedAt;
+    if (!iso && C && typeof C.thresholdReachedTime === "function") {
+      iso = C.thresholdReachedTime(outage, Date.now());
+    }
+    return iso ? formatUpdated(iso) : "Not yet reached";
+  }
+
   function statusBadgeHtml(status) {
     var key = status || "not_notified";
     return (
@@ -299,6 +315,7 @@
         "Lost users",
         outage ? formatNumber(outage.currentLostUsers) : "\u2014"
       ) +
+      detailRow("Threshold reached", thresholdReachedLabel(outage)) +
       detailRow("Current status", statusBadgeHtml(psap.status)) +
       detailRow("Last updated", formatUpdated(psap.updatedAt)) +
       "</div>";

@@ -43,6 +43,21 @@
     return !!outage && outage.currentLostUsers >= 900000;
   }
 
+  /** Resolves an outage's live user-minutes (annotated field, else computed). */
+  function userMinutesValue(outage) {
+    if (
+      outage &&
+      typeof outage.userMinutes === "number" &&
+      isFinite(outage.userMinutes)
+    ) {
+      return outage.userMinutes;
+    }
+    if (C && typeof C.computeUserMinutes === "function") {
+      return C.computeUserMinutes(outage, Date.now());
+    }
+    return 0;
+  }
+
   function escapeHtml(value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -145,14 +160,19 @@
       "PSAP = the local 911 call center. Notified = the outage has been " +
       "reported to the PSAP; Not notified = the PSAP has not been alerted yet.",
     fcc:
-      "Outages affecting 900,000 or more users must be reported to the FCC " +
-      "(NORS) and the local 911/PSAP authorities.",
+      "Outages reaching 900,000 user-minutes (users affected \u00d7 minutes of " +
+      "duration) must be reported to the FCC (NORS) and the local 911/PSAP " +
+      "authorities.",
     growth:
       "Users lost per minute — how fast the outage is growing. Drives the " +
-      "bubble size on the map.",
+      "pulsing ring speed on the map.",
     lostUsers:
-      "Total users currently affected. Drives the bubble color (yellow \u2192 " +
-      "red as it approaches the 900k FCC threshold).",
+      "Total users currently affected right now. Drives the bubble size on " +
+      "the map.",
+    userMinutes:
+      "Users affected \u00d7 minutes of duration. Drives the bubble color " +
+      "(yellow \u2192 red as it nears the 900k user-minute FCC reporting " +
+      "threshold), and is the figure that triggers an FCC report.",
     cause:
       "The underlying cause of the outage (separate from severity).",
     ticket:
@@ -307,20 +327,18 @@
         "</div>";
     }
 
-    // Reportable-only fields: threshold-reached time + live impact (tasks 4c/4d).
+    // Reportable-only field: the time it crossed the 900k user-minute threshold.
     var reportableFields = "";
     if (reportable) {
-      reportableFields =
-        fieldRowHtml(
-          "Threshold reached",
-          formatThresholdTime(outage.thresholdReachedAt),
-          tip(TIP.threshold)
-        ) +
-        fieldRowHtml(
-          "Impact",
-          escapeHtml(impactText(impactValue(outage))),
-          tip(TIP.impact)
-        );
+      var reachedIso = outage.thresholdReachedAt;
+      if (!reachedIso && C && typeof C.thresholdReachedTime === "function") {
+        reachedIso = C.thresholdReachedTime(outage, Date.now());
+      }
+      reportableFields = fieldRowHtml(
+        "Threshold reached",
+        formatThresholdTime(reachedIso),
+        tip(TIP.threshold)
+      );
     }
 
     // Related-outages section for a primary ticket (task 4b).
@@ -407,6 +425,11 @@
         tip(TIP.lostUsers)
       ) +
       fieldRowHtml(
+        "User-minutes",
+        formatNumber(userMinutesValue(outage)) + " user-min",
+        tip(TIP.userMinutes)
+      ) +
+      fieldRowHtml(
         "Growth",
         formatNumber(outage.growthRatePerMin) + " users/min",
         tip(TIP.growth)
@@ -418,7 +441,7 @@
       '<div class="detail-section detail-section--psap">' +
       '<div class="detail-section__title">PSAP / 911</div>' +
       psapBody +
-      '<a class="detail-psap-link" href="psap.html?v=21">View all PSAPs \u2192</a>' +
+      '<a class="detail-psap-link" href="psap.html?v=23">View all PSAPs \u2192</a>' +
       "</div>" +
       "</div>";
 

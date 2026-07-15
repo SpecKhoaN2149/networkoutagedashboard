@@ -10,11 +10,12 @@
  *     FCC reporting threshold so nothing on the map moves — except one target
  *     outage.
  *   - GROW: on each tick the target outage aggregates one more sub-outage. A
- *     count shown inside its bubble climbs (2, 3, 4 ...), its lost-user total
- *     climbs with it, and its color ramps toward red as it approaches 900k.
- *   - CROSS 900k: once the target reaches the threshold it becomes FCC
- *     reportable (the on-map red alert appears) while its linked PSAP is still
- *     "not_notified" — reached 900k but NOT yet reported.
+ *     count shown inside its bubble climbs (2, 3, 4 ...), and as it persists
+ *     its user-minutes (lost users × minutes of duration) accumulate, ramping
+ *     the bubble color toward red as it approaches 900k user-minutes.
+ *   - CROSS 900k user-minutes: once the target reaches the threshold it becomes
+ *     FCC reportable (the on-map red alert appears) while its linked PSAP is
+ *     still "not_notified" — reached the threshold but NOT yet reported.
  *   - REPORT: the operator opens the FCC alert and clicks "Send PSAP alert",
  *     which persists the PSAP status as "notified" (reported).
  *
@@ -27,19 +28,21 @@
   "use strict";
 
   var C = global.DashboardConstants;
-  var THRESHOLD = (C && C.FCC_REPORT_THRESHOLD) || 900000;
+  // The reporting trigger is 900,000 user-minutes (users × minutes of duration).
+  var THRESHOLD =
+    (C && (C.FCC_USER_MINUTES_THRESHOLD || C.FCC_REPORT_THRESHOLD)) || 900000;
 
   // The outage that grows during the demo. otg-004 (Minneapolis) starts as a
   // small, clearly-below-threshold outage in the seed data, so it reads well as
   // "the one to watch".
   var TARGET_ID = "otg-004";
 
-  // Each aggregated sub-outage contributes this many lost users. START_COUNT
-  // aggregated outages is the opening state; the target grows by one REAL
-  // related outage per tick up to MAX_COUNT (= 1 primary + all other seed
-  // outages). PER_OUTAGE * 9 == 900,000, so the target crosses the FCC
-  // threshold when the count reaches 9.
-  var PER_OUTAGE = 100000;
+  // Each aggregated sub-outage contributes this many lost users. The target is
+  // a modest-but-persistent outage: its user-minutes (lost users × minutes of
+  // duration) climb over the scenario and cross the 900k threshold near the
+  // end. With PER_OUTAGE=750 and STEP_MINUTES=25, user-minutes reaches 900k
+  // when the count hits 8 (6,000 users × 150 min).
+  var PER_OUTAGE = 750;
   var START_COUNT = 2;
 
   // Scenario clock: each step represents this many minutes of real time, so the
@@ -122,6 +125,9 @@
         next.aggregateCount = 0;
         next.relatedOutageIds = [];
         next.reassessed = false;
+        // Start "just now" so their user-minutes are ~0 and they stay calm
+        // (non-reportable, yellow) — only the target accumulates user-minutes.
+        next.startedAt = new Date().toISOString();
       }
       return next;
     });
@@ -229,8 +235,10 @@
       elapsedMinutes += STEP_MINUTES;
     }
 
+    // Cross when accumulated user-minutes (lost users × elapsed minutes) reach
+    // the 900k reporting threshold.
     var justCrossed = false;
-    if (!crossed && usersForCount(count) >= THRESHOLD) {
+    if (!crossed && usersForCount(count) * elapsedMinutes >= THRESHOLD) {
       crossed = true;
       crossElapsedMinutes = elapsedMinutes;
       justCrossed = true;

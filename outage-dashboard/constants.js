@@ -50,9 +50,18 @@
   // operators, so a bubble turning deep red signals "at/near the reporting
   // threshold". Color therefore encodes closeness to that 900k threshold.
   var FCC_REPORT_THRESHOLD = 900000;
+
+  // The FCC / NORS reporting trigger is defined in USER-MINUTES: an outage that
+  // potentially affects at least 900,000 user-minutes (users affected ×
+  // minutes of duration) must be reported. The color scale and reportable flag
+  // key off this figure so "redder / reportable" means "closer to / over the
+  // 900k user-minute reporting threshold".
+  var FCC_USER_MINUTES_THRESHOLD = 900000;
+
+  // Color domain is the closeness to the 900k user-minute reporting threshold.
   var LOST_USERS_DOMAIN = {
     min: 0,
-    max: FCC_REPORT_THRESHOLD,
+    max: FCC_USER_MINUTES_THRESHOLD,
   };
 
   // Ordered heat-ramp stops from coldest (yellow) to hottest (red).
@@ -207,13 +216,103 @@
   }
 
   /**
-   * Returns true when an outage's current lost users has reached the FCC / 911
-   * reporting threshold (>= 900,000), meaning it must be reported to the FCC
-   * and PSAP/911 operators. Used to flag "reportable" outages across the UI.
+   * Computes an outage's accumulated USER-MINUTES relative to `now`:
+   *   userMinutes = currentLostUsers × whole minutes since startedAt
+   * This is the FCC/NORS exposure figure. Returns 0 for a missing/invalid
+   * record, a missing/invalid start time, or a start time in the future.
+   * Pure: does not mutate the outage.
+   *
+   * @param {Object} outage
+   * @param {number|Date} [now=Date.now()] - reference time (ms epoch or Date).
+   * @returns {number} user-minutes (>= 0).
+   */
+  function computeUserMinutes(outage, now) {
+    if (!outage) {
+      return 0;
+    }
+    var users = Number(outage.currentLostUsers);
+    if (!isFinite(users) || users < 0) {
+      return 0;
+    }
+    if (!outage.startedAt) {
+      return 0;
+    }
+    var started = new Date(outage.startedAt).getTime();
+    if (isNaN(started)) {
+      return 0;
+    }
+    var nowMs =
+      now == null
+        ? Date.now()
+        : now instanceof Date
+        ? now.getTime()
+        : Number(now);
+    if (!isFinite(nowMs)) {
+      return 0;
+    }
+    var minutes = Math.floor((nowMs - started) / 60000);
+    if (minutes <= 0) {
+      return 0;
+    }
+    return minutes * users;
+  }
+
+  /**
+   * Resolves WHEN an outage reached the 900k user-minute reporting threshold,
+   * as an ISO string, or null if it has not yet. Prefers an explicit
+   * `thresholdReachedAt` on the record (e.g. set by the demo); otherwise
+   * estimates it from the user-minute accumulation: at a constant current
+   * lost-user rate, the threshold is crossed `900000 / currentLostUsers`
+   * minutes after the outage started. Returns null when that estimated time is
+   * still in the future (not yet reportable) or inputs are invalid.
+   *
+   * @param {Object} outage
+   * @param {number|Date} [now=Date.now()]
+   * @returns {string|null} ISO timestamp, or null.
+   */
+  function thresholdReachedTime(outage, now) {
+    if (!outage) {
+      return null;
+    }
+    if (outage.thresholdReachedAt) {
+      return outage.thresholdReachedAt;
+    }
+    var users = Number(outage.currentLostUsers);
+    if (!isFinite(users) || users <= 0 || !outage.startedAt) {
+      return null;
+    }
+    var started = new Date(outage.startedAt).getTime();
+    if (isNaN(started)) {
+      return null;
+    }
+    var reachedMs = started + (FCC_USER_MINUTES_THRESHOLD / users) * 60000;
+    var nowMs =
+      now == null
+        ? Date.now()
+        : now instanceof Date
+        ? now.getTime()
+        : Number(now);
+    if (!isFinite(nowMs) || reachedMs > nowMs) {
+      return null; // not yet reached
+    }
+    return new Date(reachedMs).toISOString();
+  }
+
+  /**
+   * Returns true when an outage has reached the FCC / 911 reporting threshold.
+   * The trigger is 900,000 USER-MINUTES. When the outage carries a precomputed
+   * `userMinutes` field (the app annotates it live), that is used; otherwise it
+   * falls back to the legacy 900k current-lost-users rule so pure callers /
+   * fixtures without a timeline still behave predictably.
    */
   function isReportable(outage) {
+    if (!outage) {
+      return false;
+    }
+    if (typeof outage.userMinutes === "number" && isFinite(outage.userMinutes)) {
+      return outage.userMinutes >= FCC_USER_MINUTES_THRESHOLD;
+    }
     return (
-      !!outage &&
       typeof outage.currentLostUsers === "number" &&
       isFinite(outage.currentLostUsers) &&
       outage.currentLostUsers >= FCC_REPORT_THRESHOLD
@@ -236,6 +335,7 @@
     GROWTH_RATE_DOMAIN: GROWTH_RATE_DOMAIN,
     RADIUS_BOUNDS: RADIUS_BOUNDS,
     FCC_REPORT_THRESHOLD: FCC_REPORT_THRESHOLD,
+    FCC_USER_MINUTES_THRESHOLD: FCC_USER_MINUTES_THRESHOLD,
     LOST_USERS_DOMAIN: LOST_USERS_DOMAIN,
     HEAT_RAMP_STOPS: HEAT_RAMP_STOPS,
     COLOR_LEGEND_THRESHOLDS: COLOR_LEGEND_THRESHOLDS,
@@ -249,6 +349,8 @@
     isWithinUsBounds: isWithinUsBounds,
     isValidOutage: isValidOutage,
     isReportable: isReportable,
+    computeUserMinutes: computeUserMinutes,
+    thresholdReachedTime: thresholdReachedTime,
     clamp: clamp,
   };
 

@@ -129,8 +129,19 @@
     return rgbToHex(parseHex(last.color));
   }
 
+  /**
+   * Maps accumulated USER-MINUTES to a color on the same yellow -> red ramp,
+   * anchored so 900k user-minutes (the FCC reporting threshold) is the hot
+   * (red) endpoint. Same mapping as colorForLostUsers since the color domain
+   * now represents closeness to the 900k user-minute threshold.
+   */
+  function colorForUserMinutes(userMinutes) {
+    return colorForLostUsers(userMinutes);
+  }
+
   var api = {
     colorForLostUsers: colorForLostUsers,
+    colorForUserMinutes: colorForUserMinutes,
   };
 
   // Attach to the browser global so <script>-loaded modules can read it.

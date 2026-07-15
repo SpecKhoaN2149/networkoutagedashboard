@@ -284,13 +284,33 @@
   }
 
   /**
-   * Resolves the bubble fill color for an outage from the shared Color Scale
-   * (current lost users -> color). Falls back to the coldest heat-ramp stop if
-   * the scale global is unavailable.
+   * Resolves an outage's accumulated user-minutes: prefers the live-annotated
+   * `userMinutes` field, else computes it from the start time, else 0.
+   */
+  function userMinutesFor(outage) {
+    if (outage && typeof outage.userMinutes === "number" && isFinite(outage.userMinutes)) {
+      return outage.userMinutes;
+    }
+    if (C && typeof C.computeUserMinutes === "function") {
+      return C.computeUserMinutes(outage, Date.now());
+    }
+    return 0;
+  }
+
+  /**
+   * Resolves the bubble fill color for an outage from the shared Color Scale.
+   * Color now encodes CLOSENESS TO THE 900k USER-MINUTE FCC threshold (so a
+   * bubble reddens as it approaches the point where it must be reported), while
+   * size still encodes current lost users. Falls back to the coldest heat-ramp
+   * stop if the scale global is unavailable.
    */
   function colorFor(outage) {
+    var um = userMinutesFor(outage);
+    if (ColorScale && typeof ColorScale.colorForUserMinutes === "function") {
+      return ColorScale.colorForUserMinutes(um);
+    }
     if (ColorScale && typeof ColorScale.colorForLostUsers === "function") {
-      return ColorScale.colorForLostUsers(outage.currentLostUsers);
+      return ColorScale.colorForLostUsers(um);
     }
     return C.HEAT_RAMP_STOPS[0].color;
   }
@@ -375,6 +395,7 @@
       reportableBanner +
       row("Region", outage.region) +
       row("Lost users", formatNumber(outage.currentLostUsers)) +
+      row("User-minutes", formatNumber(userMinutesFor(outage))) +
       row("Growth", formatNumber(outage.growthRatePerMin) + " users/min") +
       row("Severity", outage.severity) +
       row("Started", formatStartTime(outage.startedAt)) +

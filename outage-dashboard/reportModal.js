@@ -98,11 +98,23 @@
       : "";
   }
 
-  var IMPACT_TIP =
-    "Severity of the reporting event = time at/over the 900k threshold " +
-    "\u00d7 affected telephone lines (line-minutes).";
+  var USERMIN_TIP =
+    "Users affected \u00d7 minutes of duration. The FCC/911 report trigger is " +
+    "900,000 user-minutes.";
   var THRESHOLD_TIP =
-    "The time this outage reached the 900,000-user FCC/911 reporting threshold.";
+    "The time this outage reached the 900,000 user-minute FCC/911 reporting " +
+    "threshold.";
+
+  /** Resolves an outage's live user-minutes (annotated field, else computed). */
+  function userMinutesFor(o) {
+    if (o && typeof o.userMinutes === "number" && isFinite(o.userMinutes)) {
+      return o.userMinutes;
+    }
+    if (C && typeof C.computeUserMinutes === "function") {
+      return C.computeUserMinutes(o, Date.now());
+    }
+    return 0;
+  }
 
   /** Live impact (line-minutes) via the shared Impact helper; 0 otherwise. */
   function impactFor(outage) {
@@ -134,19 +146,20 @@
     });
 
     var intro =
-      '<p class="modal__intro">An outage that affects <strong>' +
+      '<p class="modal__intro">An outage that reaches <strong>' +
       fmt(THRESHOLD) +
-      "</strong> or more users must be reported to the <strong>FCC</strong> " +
-      "(via the Network Outage Reporting System) and the affected " +
-      "<strong>PSAP / 911</strong> authorities. The outages below have reached " +
-      "or exceeded that threshold on the Spectrum network.</p>";
+      " user-minutes</strong> (users affected \u00d7 minutes of duration) must " +
+      "be reported to the <strong>FCC</strong> (via the Network Outage " +
+      "Reporting System) and the affected <strong>PSAP / 911</strong> " +
+      "authorities. The outages below have reached or exceeded that threshold " +
+      "on the Spectrum network.</p>";
 
     var body;
     if (list.length === 0) {
       body =
         '<div class="modal__empty">No outages are currently at or over the ' +
         fmt(THRESHOLD) +
-        "-user FCC reporting threshold.</div>";
+        " user-minute FCC reporting threshold.</div>";
     } else {
       // Render each reportable outage as a card with a wrapping stat grid
       // (instead of a wide table) so the modal never scrolls left/right.
@@ -167,7 +180,8 @@
 
       var cards = list
         .map(function (o) {
-          var over = Math.max(0, o.currentLostUsers - THRESHOLD);
+          var um = userMinutesFor(o);
+          var over = Math.max(0, um - THRESHOLD);
           var psap = psapForOutage(o);
           var status = psap ? psap.status : null;
           var reported = isReported(status);
@@ -206,10 +220,10 @@
             "</div>" +
             '<div class="report-card__stats">' +
             stat("Lost users", fmt(o.currentLostUsers)) +
-            stat("Over 900k", "+" + fmt(over), "over") +
+            stat("User-minutes" + tip(USERMIN_TIP), fmt(um)) +
+            stat("Over 900k user-min", "+" + fmt(over), "over") +
             stat("Growth /min", fmt(o.growthRatePerMin)) +
             stat("Threshold reached" + tip(THRESHOLD_TIP), formatTime(o.thresholdReachedAt)) +
-            stat("Impact" + tip(IMPACT_TIP), escapeHtml(impactText(impactFor(o)))) +
             stat(
               "PSAP status",
               escapeHtml(
@@ -240,7 +254,7 @@
       "<li>File / update the FCC NORS report for each outage above.</li>" +
       "<li>Notify the affected PSAP / 911 authorities in the impacted regions.</li>" +
       "<li>Confirm the Spectrum user count and restoration ETA.</li>" +
-      "<li>Track each outage until it drops back below " + fmt(THRESHOLD) + " users.</li>" +
+      "<li>Update / close the report as each outage is restored.</li>" +
       "</ul>";
 
     return intro + body + actions;

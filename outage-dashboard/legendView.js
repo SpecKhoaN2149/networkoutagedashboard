@@ -82,7 +82,7 @@
 
     var heading = document.createElement("div");
     heading.className = "legend__heading";
-    heading.textContent = "Users affected (bubble size & color)";
+    heading.textContent = "Users affected (bubble size)";
     section.appendChild(heading);
 
     var sizes = document.createElement("div");
@@ -126,7 +126,7 @@
 
     var heading = document.createElement("div");
     heading.className = "legend__heading";
-    heading.textContent = "Closeness to 900k (color)";
+    heading.textContent = "Closeness to 900k user-min (color)";
     section.appendChild(heading);
 
     // The gradient bar's yellow->orange->red background is defined in CSS.

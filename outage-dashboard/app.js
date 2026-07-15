@@ -105,8 +105,9 @@
       var thresholdTip =
         InfoTip && InfoTip.infoTipHtml
           ? InfoTip.infoTipHtml(
-              "Outages affecting 900,000 or more users must be reported to " +
-                "the FCC (NORS) and the local 911/PSAP authorities."
+              "Outages reaching 900,000 user-minutes (users affected × " +
+                "minutes of duration) must be reported to the FCC (NORS) and " +
+                "the local 911/PSAP authorities."
             )
           : "";
 
@@ -118,7 +119,7 @@
         '<span class="fcc-alert__count">' +
         reportable.length +
         "</span>" +
-        '<span class="fcc-alert__label">FCC reportable (\u2265900k)' +
+        '<span class="fcc-alert__label">FCC reportable (\u2265900k user-min)' +
         thresholdTip +
         "</span>" +
         '<span class="fcc-alert__hint">details \u2192</span>';
@@ -133,6 +134,10 @@
       var MockData = ns("MockData");
       return MockData ? MockData.getMockOutages() : [];
     }) || [];
+
+    // Annotate live user-minutes up front so the very first render colors and
+    // flags bubbles by closeness to the 900k user-minute reporting threshold.
+    annotateUserMinutes(outages);
 
     // Id of the outage currently shown in the right-hand detail panel, or null
     // when nothing is selected. Kept in sync across map/table selections and
@@ -231,6 +236,27 @@
         });
       }
       return { byOutage: byOutage, byPsapId: byPsapId };
+    }
+
+    /**
+     * Annotates each outage with its live `userMinutes` (current lost users ×
+     * minutes since it started). This is the FCC/NORS reporting figure, and
+     * drives the bubble color (closeness to 900k user-minutes) and the
+     * reportable flag consistently across the map, table, detail panel, filter,
+     * and FCC alert. Mutates the (freshly-cloned each tick) records in place.
+     */
+    function annotateUserMinutes(list) {
+      var C = ns("DashboardConstants");
+      if (!C || typeof C.computeUserMinutes !== "function") {
+        return list;
+      }
+      var now = Date.now();
+      (Array.isArray(list) ? list : []).forEach(function (o) {
+        if (o) {
+          o.userMinutes = C.computeUserMinutes(o, now);
+        }
+      });
+      return list;
     }
 
     /**
@@ -575,6 +601,7 @@
       var Demo = ns("DemoScenario");
       if (!Demo) return;
       outages = Demo.start() || outages;
+      annotateUserMinutes(outages);
       selectedId = null;
       safely("DetailPanel.renderEmpty (demo)", function () {
         var DetailPanel = ns("DetailPanel");
@@ -595,6 +622,7 @@
           var MockData = ns("MockData");
           return MockData ? MockData.getMockOutages() : outages;
         })();
+      annotateUserMinutes(outages);
       selectedId = null;
       safely("DetailPanel.renderEmpty (exit demo)", function () {
         var DetailPanel = ns("DetailPanel");
@@ -740,8 +768,10 @@
       }
       if (!next) return; // Skip this tick if drift/advance failed; retry later.
 
-      // Commit the single updated list as the new source of truth.
+      // Commit the single updated list as the new source of truth, and refresh
+      // each record's live user-minutes (grows as time passes).
       outages = next;
+      annotateUserMinutes(outages);
       summary = computeSummary(outages);
 
       // Refresh the map bubbles in place from the updated list.
