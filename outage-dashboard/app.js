@@ -533,6 +533,32 @@
       updateFccBanner(outages);
     }
 
+    // Formats simulated minutes as "Xh YYm" for the demo scenario clock.
+    function formatElapsed(mins) {
+      var m = Math.max(0, Math.round(mins || 0));
+      var h = Math.floor(m / 60);
+      var r = m % 60;
+      return h + "h " + (r < 10 ? "0" + r : r) + "m";
+    }
+
+    // Shows/updates the on-map scenario clock while the demo is active; hides it
+    // otherwise. Self-guards so it is safe to call from any refresh path.
+    function updateDemoTimeline() {
+      if (typeof document === "undefined") return;
+      var el = document.getElementById("demo-timeline");
+      if (!el) return;
+      var Demo = ns("DemoScenario");
+      if (Demo && Demo.isActive && Demo.isActive()) {
+        var val = document.getElementById("demo-timeline-value");
+        if (val && typeof Demo.getElapsedMinutes === "function") {
+          val.textContent = formatElapsed(Demo.getElapsedMinutes());
+        }
+        el.hidden = false;
+      } else {
+        el.hidden = true;
+      }
+    }
+
     function updateDemoButtons(isActive) {
       if (typeof document === "undefined") return;
       var startBtn = document.getElementById("demo-start");
@@ -556,6 +582,7 @@
       });
       fullRenderFromOutages();
       updateDemoButtons(true);
+      updateDemoTimeline();
       // Run the timer faster so the scripted story moves along.
       startTimer(DEMO_TICK_INTERVAL_MS);
     }
@@ -575,6 +602,7 @@
       });
       fullRenderFromOutages();
       updateDemoButtons(false);
+      updateDemoTimeline();
       // Restore the normal live-drift cadence.
       startTimer(TICK_INTERVAL_MS);
     }
@@ -766,6 +794,9 @@
         var ReportModal = ns("ReportModal");
         if (ReportModal) ReportModal.refresh(outages);
       });
+
+      // Advance the on-map demo scenario clock (no-op outside the demo).
+      updateDemoTimeline();
     }
 
     // Start the repeating timer (Req 12.1). Kept in a restartable helper so the

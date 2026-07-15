@@ -35,12 +35,16 @@
   var TARGET_ID = "otg-004";
 
   // Each aggregated sub-outage contributes this many lost users. START_COUNT
-  // aggregated outages is the opening state; the target grows by one sub-outage
-  // per tick up to MAX_COUNT. PER_OUTAGE * 10 == 900,000, so the target crosses
-  // the FCC threshold exactly when the count reaches 10.
-  var PER_OUTAGE = 90000;
+  // aggregated outages is the opening state; the target grows by one REAL
+  // related outage per tick up to MAX_COUNT (= 1 primary + all other seed
+  // outages). PER_OUTAGE * 9 == 900,000, so the target crosses the FCC
+  // threshold when the count reaches 9.
+  var PER_OUTAGE = 100000;
   var START_COUNT = 2;
-  var MAX_COUNT = 11; // ~990k at the end, comfortably over the threshold
+
+  // Scenario clock: each step represents this many minutes of real time, so the
+  // ~8 growth steps read as unfolding over ~3.5 hours.
+  var STEP_MINUTES = 25;
 
   // Ceilings applied to every NON-target outage so the demo baseline is calm:
   // nobody else is anywhere near 900k and their velocity pulse is gentle.
@@ -55,6 +59,15 @@
   var count = START_COUNT;
   var crossed = false; // becomes true once the target reaches the threshold
   var list = []; // current demo outage list (source of truth while active)
+
+  // Ordered ids of the OTHER seed outages the target aggregates as it grows.
+  var otherIds = [];
+  var maxCount = 10; // recomputed in start() as 1 + otherIds.length
+
+  // Scenario clock: minutes of simulated time elapsed since the outage began,
+  // and the elapsed value at the moment it crossed the threshold.
+  var elapsedMinutes = 0;
+  var crossElapsedMinutes = 0;
 
   function ns(name) {
     return (global && global[name]) || null;
@@ -98,7 +111,8 @@
         next.relatedOutageIds = [];
         next.reassessed = false;
       } else {
-        // Freeze everyone else well below the threshold so the map is still.
+        // Freeze everyone else well below the threshold so the map is still,
+        // and clear their own grouping so only the target tells a story.
         next.currentLostUsers = Math.min(next.currentLostUsers, CALM_USER_CAP);
         next.growthRatePerMin = Math.min(
           next.growthRatePerMin,
@@ -106,6 +120,8 @@
         );
         next.thresholdReachedAt = null;
         next.aggregateCount = 0;
+        next.relatedOutageIds = [];
+        next.reassessed = false;
       }
       return next;
     });
@@ -114,17 +130,27 @@
   /** Rebuilds `list` from the current `count` (target grown, others frozen). */
   function rebuild() {
     var baseline = buildBaseline();
+    var now = Date.now();
     for (var i = 0; i < baseline.length; i++) {
       if (baseline[i].id === TARGET_ID) {
-        baseline[i].currentLostUsers = usersForCount(count);
-        baseline[i].aggregateCount = count;
-        baseline[i].growthRatePerMin = TARGET_GROWTH;
-        if (crossed) {
-          // Keep a stable "reached threshold" stamp once crossed.
-          if (!baseline[i].thresholdReachedAt) {
-            baseline[i].thresholdReachedAt = new Date().toISOString();
-          }
-        }
+        var t = baseline[i];
+        t.currentLostUsers = usersForCount(count);
+        t.aggregateCount = count;
+        t.growthRatePerMin = TARGET_GROWTH;
+        // Attach the REAL related outages the target has aggregated so far, so
+        // the detail panel lists them and the bubble count matches the group
+        // (bubble count = 1 primary + related). At count N there are N-1
+        // related outages.
+        t.relatedOutageIds = otherIds.slice(0, Math.max(0, count - 1));
+        // Scenario clock: the outage began `elapsedMinutes` of simulated time
+        // ago, and (once crossed) reached the threshold that many minutes after
+        // it began — so the detail panel reads as hours of real activity.
+        t.startedAt = new Date(now - elapsedMinutes * 60000).toISOString();
+        t.thresholdReachedAt = crossed
+          ? new Date(
+              now - (elapsedMinutes - crossElapsedMinutes) * 60000
+            ).toISOString()
+          : null;
       }
     }
     list = baseline;
@@ -140,6 +166,23 @@
     active = true;
     count = START_COUNT;
     crossed = false;
+    elapsedMinutes = 0;
+    crossElapsedMinutes = 0;
+
+    // Ordered ids of the other seed outages the target aggregates as it grows.
+    var MockData = ns("MockData");
+    var seed =
+      MockData && typeof MockData.getMockOutages === "function"
+        ? MockData.getMockOutages()
+        : [];
+    otherIds = seed
+      .filter(function (o) {
+        return o.id !== TARGET_ID;
+      })
+      .map(function (o) {
+        return o.id;
+      });
+    maxCount = otherIds.length + 1;
 
     // Reset PSAP overrides so a repeated demo always starts clean, then make
     // the target's PSAP explicitly "not required" (it is below threshold).
@@ -181,13 +224,15 @@
     if (!active) {
       return null;
     }
-    if (count < MAX_COUNT) {
+    if (count < maxCount) {
       count += 1;
+      elapsedMinutes += STEP_MINUTES;
     }
 
     var justCrossed = false;
     if (!crossed && usersForCount(count) >= THRESHOLD) {
       crossed = true;
+      crossElapsedMinutes = elapsedMinutes;
       justCrossed = true;
     }
 
@@ -223,6 +268,10 @@
     },
     getList: function () {
       return list;
+    },
+    /** Minutes of simulated scenario time elapsed since the outage began. */
+    getElapsedMinutes: function () {
+      return elapsedMinutes;
     },
     TARGET_ID: TARGET_ID,
   };
