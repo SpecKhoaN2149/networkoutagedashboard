@@ -1634,6 +1634,50 @@ h3 {
   justify-content: flex-start;
 }
 
+/* Related-outages list (primary ticket): each row is clickable — the name on
+ * the left, the ticket id (underlined to signal it opens that outage) on the
+ * right with clear spacing between them. */
+.detail-related {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.detail-related__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  padding: 7px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.detail-related__item:hover,
+.detail-related__item:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.detail-related__name {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.detail-related__ticket {
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--accent);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
 .detail-reported {
   display: inline-block;
   padding: 2px 10px;

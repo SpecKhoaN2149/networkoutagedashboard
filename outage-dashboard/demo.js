@@ -32,10 +32,9 @@
   var THRESHOLD =
     (C && (C.FCC_USER_MINUTES_THRESHOLD || C.FCC_REPORT_THRESHOLD)) || 900000;
 
-  // The outage that grows during the demo. otg-004 (Minneapolis) starts as a
-  // small, clearly-below-threshold outage in the seed data, so it reads well as
-  // "the one to watch".
-  var TARGET_ID = "otg-004";
+  // The outage that grows during the demo: New York City (otg-001), a
+  // recognizable metro that reads well as "the one to watch".
+  var TARGET_ID = "otg-001";
 
   // Each aggregated sub-outage contributes this many lost users. The target is
   // a modest-but-persistent outage: its user-minutes (lost users × minutes of

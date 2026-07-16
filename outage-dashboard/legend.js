@@ -35,9 +35,9 @@
     (global && global.ColorScale) ||
     (typeof require !== "undefined" ? require("./colorScale") : undefined);
 
-  var LOST_USERS_LEGEND_SAMPLES = Constants.LOST_USERS_LEGEND_SAMPLES;
+  var SIZE_LEGEND_SAMPLES = Constants.SIZE_LEGEND_SAMPLES;
   var COLOR_LEGEND_THRESHOLDS = Constants.COLOR_LEGEND_THRESHOLDS;
-  var radiusForLostUsers = SizeScale.radiusForLostUsers;
+  var radiusForGrowthRate = SizeScale.radiusForGrowthRate;
   var colorForLostUsers = ColorScale.colorForLostUsers;
 
   /**
@@ -67,12 +67,12 @@
    * @returns {{sizeSamples: Array, colorStops: Array}} the LegendModel.
    */
   function getLegendModel() {
-    var sizeSamples = LOST_USERS_LEGEND_SAMPLES.map(function (sample) {
+    var sizeSamples = SIZE_LEGEND_SAMPLES.map(function (sample) {
       return {
         label: sample.label,
-        lostUsers: sample.lostUsers,
-        // Derived from the SAME lost-users size scale the map uses.
-        radiusPx: radiusForLostUsers(sample.lostUsers),
+        growthRatePerMin: sample.growthRatePerMin,
+        // Derived from the SAME growth-rate (velocity) size scale the map uses.
+        radiusPx: radiusForGrowthRate(sample.growthRatePerMin),
       };
     });
 

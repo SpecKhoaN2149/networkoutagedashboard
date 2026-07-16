@@ -276,9 +276,14 @@
    * Falls back to the min radius bound if the scale global is somehow
    * unavailable so rendering never throws.
    */
+  /**
+   * Bubble SIZE now encodes VELOCITY (growth rate, users lost per minute): a
+   * faster-growing outage is drawn larger. Color separately encodes closeness
+   * to the 900k user-minute reporting threshold.
+   */
   function radiusFor(outage) {
-    if (SizeScale && typeof SizeScale.radiusForLostUsers === "function") {
-      return SizeScale.radiusForLostUsers(outage.currentLostUsers);
+    if (SizeScale && typeof SizeScale.radiusForGrowthRate === "function") {
+      return SizeScale.radiusForGrowthRate(outage.growthRatePerMin);
     }
     return C.RADIUS_BOUNDS.min;
   }
@@ -477,27 +482,22 @@
    * stubbed Leaflet in tests, or before the marker is added to the DOM).
    */
   function applyPulseState(marker, outage) {
+    // The velocity pulse has been retired: velocity is now encoded by bubble
+    // SIZE, and reportability by the bubble COLOR (deep red at the 900k
+    // user-minute threshold). Clear any pulse classes a marker might carry so
+    // no ring animation renders.
     var path = marker && marker._path;
     if (!path || !path.classList) {
       return;
     }
-    path.classList.add(PULSE_BASE_CLASS);
-    if (reportableFor(outage)) {
-      path.classList.add(PULSE_REPORTABLE_CLASS);
-      path.classList.remove(PULSE_NEUTRAL_CLASS);
-    } else {
-      path.classList.add(PULSE_NEUTRAL_CLASS);
-      path.classList.remove(PULSE_REPORTABLE_CLASS);
-    }
-    // Keep legacy class in sync for any styles/tests that still reference it.
-    if (reportableFor(outage)) {
-      path.classList.add("bubble--reportable");
-    } else {
-      path.classList.remove("bubble--reportable");
-    }
-    var durationS = pulseDurationSeconds(outage && outage.growthRatePerMin);
+    path.classList.remove(
+      PULSE_BASE_CLASS,
+      PULSE_REPORTABLE_CLASS,
+      PULSE_NEUTRAL_CLASS,
+      "bubble--reportable"
+    );
     if (path.style) {
-      path.style.animationDuration = durationS.toFixed(2) + "s";
+      path.style.animationDuration = "";
     }
   }
 
@@ -563,10 +563,6 @@
       color: BUBBLE_STROKE_COLOR,
       weight: BUBBLE_STROKE_WEIGHT,
       opacity: BUBBLE_STROKE_OPACITY,
-      className:
-        PULSE_BASE_CLASS +
-        " " +
-        (reportableFor(outage) ? PULSE_REPORTABLE_CLASS : PULSE_NEUTRAL_CLASS),
     });
 
     marker.bindPopup(popupHtml(outage), {

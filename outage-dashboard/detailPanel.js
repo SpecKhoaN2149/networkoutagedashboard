@@ -165,10 +165,9 @@
       "authorities.",
     growth:
       "Users lost per minute — how fast the outage is growing. Drives the " +
-      "pulsing ring speed on the map.",
+      "bubble size on the map (faster growth = larger bubble).",
     lostUsers:
-      "Total users currently affected right now. Drives the bubble size on " +
-      "the map.",
+      "Total users currently affected right now.",
     userMinutes:
       "Users affected \u00d7 minutes of duration. Drives the bubble color " +
       "(yellow \u2192 red as it nears the 900k user-minute FCC reporting " +
@@ -441,7 +440,7 @@
       '<div class="detail-section detail-section--psap">' +
       '<div class="detail-section__title">PSAP / 911</div>' +
       psapBody +
-      '<a class="detail-psap-link" href="psap.html?v=23">View all PSAPs \u2192</a>' +
+      '<a class="detail-psap-link" href="psap.html?v=26">View all PSAPs \u2192</a>' +
       "</div>" +
       "</div>";
 

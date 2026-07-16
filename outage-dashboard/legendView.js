@@ -82,7 +82,7 @@
 
     var heading = document.createElement("div");
     heading.className = "legend__heading";
-    heading.textContent = "Users affected (bubble size)";
+    heading.textContent = "Growth velocity (bubble size)";
     section.appendChild(heading);
 
     var sizes = document.createElement("div");
@@ -249,7 +249,6 @@
     el.appendChild(buildHeaderBar(el));
     el.appendChild(buildSizeSection(model.sizeSamples));
     el.appendChild(buildColorSection(model.colorStops));
-    el.appendChild(buildPulseNote());
 
     if (wasCollapsed) {
       el.classList.add("legend--collapsed");
