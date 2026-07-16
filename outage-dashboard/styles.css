@@ -1541,6 +1541,35 @@ h3 {
   gap: 16px;
 }
 
+/* Back control shown when drilling in from a related outage. */
+.detail-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 4px 6px;
+  margin: -2px 0 -6px -6px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s ease;
+}
+
+.detail-back:hover {
+  background: var(--bg-elevated);
+  text-decoration: underline;
+}
+
+.detail-back__arrow {
+  font-size: 15px;
+  line-height: 1;
+}
+
 .detail-card__head {
   display: flex;
   flex-direction: column;

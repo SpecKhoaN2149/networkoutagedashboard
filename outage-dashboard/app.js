@@ -144,6 +144,10 @@
     // re-resolved from the updated list on each drift tick.
     var selectedId = null;
 
+    // When the operator drills into a RELATED outage, this holds the outage to
+    // return to (the primary), so the detail panel can show a back arrow.
+    var backToId = null;
+
     /**
      * Looks up an outage in the current list by id.
      * @param {string} id
@@ -183,20 +187,36 @@
      * detail panel, and highlights its table row. Passing a falsy value clears
      * the selection back to the empty state.
      */
-    function selectOutage(outage) {
-      selectedId = outage && outage.id ? outage.id : null;
-      // Re-resolve from the current list so we always render the freshest
-      // record (map marker click handlers may capture an older reference).
-      var current = selectedId ? findOutageById(selectedId) || outage : null;
-      safely("DetailPanel.render (select)", function () {
+    /**
+     * Renders the currently-selected outage into the detail panel, including a
+     * back arrow when we drilled in from a related outage. Re-resolves the
+     * record from the live list so it always shows the freshest values.
+     */
+    function renderSelectedDetail() {
+      safely("DetailPanel render (selected)", function () {
         var DetailPanel = ns("DetailPanel");
         if (!DetailPanel) return;
-        if (current) {
-          DetailPanel.render(current);
-        } else {
+        var current = selectedId ? findOutageById(selectedId) : null;
+        if (!current) {
           DetailPanel.renderEmpty();
+          return;
         }
+        var showBack = backToId != null && backToId !== selectedId;
+        var backLabel = null;
+        if (showBack) {
+          var b = findOutageById(backToId);
+          backLabel = b ? b.name : null;
+        }
+        DetailPanel.render(current, undefined, {
+          showBack: showBack,
+          backLabel: backLabel,
+        });
       });
+    }
+
+    function selectOutage(outage) {
+      selectedId = outage && outage.id ? outage.id : null;
+      renderSelectedDetail();
       highlightTableRow(selectedId);
     }
 
@@ -421,6 +441,7 @@
       var MapRenderer = ns("MapRenderer");
       if (MapRenderer && MapRenderer.setSelectHandler) {
         MapRenderer.setSelectHandler(function (outage) {
+          backToId = null; // a fresh map selection starts a new context
           selectOutage(outage);
         });
       }
@@ -515,11 +536,7 @@
     function refreshPsapDependentViews() {
       applyFilter();
       if (selectedId !== null) {
-        var current = findOutageById(selectedId);
-        var DetailPanel = ns("DetailPanel");
-        if (DetailPanel && current) {
-          DetailPanel.render(current);
-        }
+        renderSelectedDetail();
         highlightTableRow(selectedId);
       }
     }
@@ -603,6 +620,7 @@
       outages = Demo.start() || outages;
       annotateUserMinutes(outages);
       selectedId = null;
+      backToId = null;
       safely("DetailPanel.renderEmpty (demo)", function () {
         var DetailPanel = ns("DetailPanel");
         if (DetailPanel) DetailPanel.renderEmpty();
@@ -624,6 +642,7 @@
         })();
       annotateUserMinutes(outages);
       selectedId = null;
+      backToId = null;
       safely("DetailPanel.renderEmpty (exit demo)", function () {
         var DetailPanel = ns("DetailPanel");
         if (DetailPanel) DetailPanel.renderEmpty();
@@ -659,6 +678,7 @@
         var id = row.getAttribute("data-outage-id");
         var outage = findOutageById(id);
         if (outage) {
+          backToId = null; // a fresh table selection starts a new context
           selectOutage(outage);
         }
       });
@@ -713,6 +733,20 @@
       var panel = document.getElementById("detail-panel");
       if (!panel) return;
       panel.addEventListener("click", function (evt) {
+        // Back arrow: return to the primary outage we drilled in from.
+        var backBtn =
+          evt.target && evt.target.closest
+            ? evt.target.closest("[data-detail-back]")
+            : null;
+        if (backBtn) {
+          if (backToId != null) {
+            var target = findOutageById(backToId);
+            backToId = null;
+            if (target) selectOutage(target);
+          }
+          return;
+        }
+
         var el = evt.target && evt.target.closest
           ? evt.target.closest("[data-outage-id]")
           : null;
@@ -720,6 +754,13 @@
         var id = el.getAttribute("data-outage-id");
         var outage = findOutageById(id);
         if (outage) {
+          // Drilling into a RELATED outage remembers the current (primary) one
+          // so the back arrow can return to it; other clicks start fresh.
+          if (el.closest && el.closest(".detail-related")) {
+            backToId = selectedId;
+          } else {
+            backToId = null;
+          }
           selectOutage(outage);
         }
       });
@@ -793,20 +834,14 @@
       // outage is gone, fall back to the empty state.
       safely("DetailPanel refresh (tick)", function () {
         if (selectedId === null) return;
-        var current = findOutageById(selectedId);
-        var DetailPanel = ns("DetailPanel");
-        if (DetailPanel) {
-          if (current) {
-            DetailPanel.render(current);
-          } else {
-            DetailPanel.renderEmpty();
-          }
-        }
-        if (current) {
-          highlightTableRow(selectedId);
-        } else {
+        if (!findOutageById(selectedId)) {
           selectedId = null;
+          backToId = null;
+          renderSelectedDetail();
+          return;
         }
+        renderSelectedDetail();
+        highlightTableRow(selectedId);
       });
 
       // Update the last-updated timestamp synchronously within the tick

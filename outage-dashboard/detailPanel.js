@@ -290,13 +290,29 @@
    * @param {string} [containerId]
    * @returns {HTMLElement|null}
    */
-  function render(outage, containerId) {
+  function render(outage, containerId, options) {
     var el = resolveContainer(containerId);
     if (!el) {
       return null;
     }
     if (!outage) {
       return renderEmpty(containerId);
+    }
+
+    // Optional "back" control, shown when this outage was opened by drilling
+    // into a related outage — lets the operator return to the primary outage.
+    var backHtml = "";
+    if (options && options.showBack) {
+      var backLabel = options.backLabel
+        ? "Back to " + escapeHtml(options.backLabel)
+        : "Back";
+      backHtml =
+        '<button type="button" class="detail-back" data-detail-back ' +
+        'aria-label="' +
+        backLabel +
+        '"><span class="detail-back__arrow" aria-hidden="true">\u2190</span>' +
+        backLabel +
+        "</button>";
     }
 
     var reportable = isReportable(outage);
@@ -396,6 +412,7 @@
 
     el.innerHTML =
       '<div class="detail-card">' +
+      backHtml +
       '<div class="detail-card__head">' +
       '<h3 class="detail-card__title">' +
       escapeHtml(outage.name) +
@@ -440,7 +457,7 @@
       '<div class="detail-section detail-section--psap">' +
       '<div class="detail-section__title">PSAP / 911</div>' +
       psapBody +
-      '<a class="detail-psap-link" href="psap.html?v=26">View all PSAPs \u2192</a>' +
+      '<a class="detail-psap-link" href="psap.html?v=27">View all PSAPs \u2192</a>' +
       "</div>" +
       "</div>";
 
