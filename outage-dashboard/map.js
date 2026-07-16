@@ -293,7 +293,7 @@
         : C.RADIUS_BOUNDS.min;
     // If this bubble carries a count label, keep it larger than the number.
     var count = countForOutage(outage);
-    if (count && count > 1 && r < MIN_RADIUS_WITH_LABEL) {
+    if (count && count > 0 && r < MIN_RADIUS_WITH_LABEL) {
       r = MIN_RADIUS_WITH_LABEL;
     }
     return r;
@@ -520,24 +520,18 @@
    * (which has no tooltip methods) and for outages without a count.
    */
   /**
-   * Resolves the number of outages a bubble represents. The live demo sets an
-   * explicit `aggregateCount` (which takes precedence); otherwise the count is
-   * derived from `relatedOutageIds` — a primary ticket that groups N related
-   * outages represents N + 1 outages (itself plus its related tickets). Returns
-   * null when the bubble represents a single outage (no label shown).
+   * Resolves the number to show inside a bubble: the count of RELATED outages
+   * grouped under this one (so 5 related outages shows "5"). Returns null when
+   * there are no related outages (no label shown). Applies to both the seed
+   * primary tickets and the live demo (whose related list grows over time).
    */
   function countForOutage(outage) {
-    if (!outage) {
-      return null;
-    }
-    if (typeof outage.aggregateCount === "number") {
-      return outage.aggregateCount;
-    }
     if (
+      outage &&
       Array.isArray(outage.relatedOutageIds) &&
       outage.relatedOutageIds.length > 0
     ) {
-      return outage.relatedOutageIds.length + 1;
+      return outage.relatedOutageIds.length;
     }
     return null;
   }
@@ -550,7 +544,7 @@
     var hasTip =
       typeof marker.getTooltip === "function" ? !!marker.getTooltip() : false;
 
-    if (count && count > 1) {
+    if (count && count > 0) {
       if (hasTip && typeof marker.setTooltipContent === "function") {
         marker.setTooltipContent(String(count));
       } else {
