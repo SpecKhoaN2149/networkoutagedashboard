@@ -281,11 +281,22 @@
    * faster-growing outage is drawn larger. Color separately encodes closeness
    * to the 900k user-minute reporting threshold.
    */
+  // A bubble that shows an aggregate-count label must be at least this radius
+  // so the number always fits comfortably inside it (the count pill is ~26px
+  // wide, so a ~40px+ diameter clears it).
+  var MIN_RADIUS_WITH_LABEL = 20;
+
   function radiusFor(outage) {
-    if (SizeScale && typeof SizeScale.radiusForGrowthRate === "function") {
-      return SizeScale.radiusForGrowthRate(outage.growthRatePerMin);
+    var r =
+      SizeScale && typeof SizeScale.radiusForGrowthRate === "function"
+        ? SizeScale.radiusForGrowthRate(outage.growthRatePerMin)
+        : C.RADIUS_BOUNDS.min;
+    // If this bubble carries a count label, keep it larger than the number.
+    var count = countForOutage(outage);
+    if (count && count > 1 && r < MIN_RADIUS_WITH_LABEL) {
+      r = MIN_RADIUS_WITH_LABEL;
     }
-    return C.RADIUS_BOUNDS.min;
+    return r;
   }
 
   /**
