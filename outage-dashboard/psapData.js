@@ -8,9 +8,14 @@
  * the test runner without any build step (mirrors mockData.js / constants.js).
  *
  * Each PSAP corresponds to exactly one seed outage region and carries a
- * reporting `status` used across the detail panel and the PSAP status page:
- *   - "notified"     — the outage has been reported to the PSAP (blue)
- *   - "not_notified" — the PSAP has not been notified yet (amber/alert)
+ * reporting `status` used across the detail panel and the PSAP status page.
+ * The status encodes two things: whether the linked outage has reached the
+ * 900k user-minute FCC reporting threshold, and whether the PSAP has been
+ * notified:
+ *   - "reached_not_notified" — over 900k, PSAP NOT notified yet (critical/red)
+ *   - "not_notified"         — below 900k, PSAP not notified (amber/alert)
+ *   - "reached_notified"     — over 900k, PSAP notified (resolved/green)
+ *   - "notified"             — below 900k, PSAP notified (blue)
  */
 (function (global) {
   "use strict";
@@ -30,7 +35,7 @@
       county: "New York County",
       state: "NY",
       phone: "911 / +1-212-555-0101",
-      status: "not_notified",
+      status: "reached_not_notified",
       linkedOutageId: "otg-001",
       updatedMinutesAgo: 12,
     },
@@ -50,7 +55,7 @@
       county: "Cook County",
       state: "IL",
       phone: "911 / +1-312-555-0103",
-      status: "not_notified",
+      status: "reached_notified",
       linkedOutageId: "otg-003",
       updatedMinutesAgo: 27,
     },
@@ -80,7 +85,7 @@
       county: "Fulton County",
       state: "GA",
       phone: "911 / +1-404-555-0106",
-      status: "not_notified",
+      status: "reached_not_notified",
       linkedOutageId: "otg-006",
       updatedMinutesAgo: 19,
     },
@@ -100,7 +105,7 @@
       county: "Los Angeles County",
       state: "CA",
       phone: "911 / +1-213-555-0108",
-      status: "notified",
+      status: "reached_notified",
       linkedOutageId: "otg-008",
       updatedMinutesAgo: 8,
     },
@@ -120,7 +125,7 @@
       county: "King County",
       state: "WA",
       phone: "911 / +1-206-555-0110",
-      status: "not_notified",
+      status: "notified",
       linkedOutageId: "otg-010",
       updatedMinutesAgo: 15,
     },
@@ -136,9 +141,21 @@
 
   var STORAGE_KEY = "psap-status-overrides";
 
-  // The four allowed reporting statuses. Kept local so this module stays
+  // Separate key holding a per-PSAP array of past status-change events
+  // ({ status, updatedAt, note }). Seed history is synthesized on read and any
+  // operator-made changes are appended here, so the management modal can show a
+  // full audit trail rather than just the latest status.
+  var HISTORY_KEY = "psap-status-history";
+
+  // The allowed reporting statuses. Kept local so this module stays
   // self-contained (and testable under Node/Vitest without other modules).
-  var ALLOWED_STATUSES = ["notified", "not_notified"];
+  // Each combines "reached 900k" with the notification state.
+  var ALLOWED_STATUSES = [
+    "reached_not_notified",
+    "not_notified",
+    "reached_notified",
+    "notified",
+  ];
 
   /**
    * Resolves a browser-like localStorage, preferring a bare `localStorage`
@@ -201,6 +218,99 @@
     } catch (e) {
       /* ignore quota / serialization errors in this mockup */
     }
+  }
+
+  /**
+   * Reads the persisted history map ({ [psapId]: [{ status, updatedAt, note }] })
+   * from storage. Returns {} when storage is unavailable or the value is
+   * missing / malformed.
+   */
+  function readHistory() {
+    var storage = getStorage();
+    if (!storage) {
+      return {};
+    }
+    try {
+      var raw = storage.getItem(HISTORY_KEY);
+      if (!raw) {
+        return {};
+      }
+      var parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  /** Persists the history map. No-op when storage is unavailable. */
+  function writeHistory(history) {
+    var storage = getStorage();
+    if (!storage) {
+      return;
+    }
+    try {
+      storage.setItem(HISTORY_KEY, JSON.stringify(history || {}));
+    } catch (e) {
+      /* ignore quota / serialization errors in this mockup */
+    }
+  }
+
+  // Short human-readable note per status, used to annotate history events.
+  var STATUS_NOTE = {
+    reached_not_notified:
+      "Reached 900k user-minutes — PSAP not yet notified",
+    not_notified: "PSAP not notified",
+    reached_notified: "Reached 900k user-minutes — PSAP notified",
+    notified: "PSAP notified",
+  };
+
+  function isoFromMinutesAgo(now, minutesAgo) {
+    return new Date(now - minutesAgo * 60 * 1000).toISOString();
+  }
+
+  /**
+   * Synthesizes a plausible seed timeline for a PSAP that ends at its current
+   * seed status, so the history view always has meaningful context even before
+   * an operator makes any change. Returns events oldest-first.
+   */
+  function buildSeedHistory(def, now) {
+    var events = [];
+    var last = def.updatedMinutesAgo;
+
+    // 1) Initial detection, well before the last update.
+    events.push({
+      status: "not_notified",
+      updatedAt: isoFromMinutesAgo(now, last + 240),
+      note: "Outage detected in " + def.county + " — PSAP not yet notified",
+      seed: true,
+    });
+
+    // 2) If the current status says the outage crossed 900k, record that.
+    if (
+      def.status === "reached_not_notified" ||
+      def.status === "reached_notified"
+    ) {
+      events.push({
+        status: "reached_not_notified",
+        updatedAt: isoFromMinutesAgo(now, last + 90),
+        note: "Crossed 900k user-minute FCC reporting threshold",
+        seed: true,
+      });
+    }
+
+    // 3) The current seed status as the latest seed event (skip if identical
+    //    to the one just pushed so we do not duplicate).
+    var prev = events[events.length - 1];
+    if (!prev || prev.status !== def.status) {
+      events.push({
+        status: def.status,
+        updatedAt: isoFromMinutesAgo(now, last),
+        note: STATUS_NOTE[def.status] || "Status updated",
+        seed: true,
+      });
+    }
+
+    return events;
   }
 
   /**
@@ -276,9 +386,21 @@
       return null;
     }
 
+    var stampedAt = new Date().toISOString();
     var overrides = readOverrides();
-    overrides[psapId] = { status: status, updatedAt: new Date().toISOString() };
+    overrides[psapId] = { status: status, updatedAt: stampedAt };
     writeOverrides(overrides);
+
+    // Append an audit-trail entry so the history view reflects the change.
+    var history = readHistory();
+    var events = Array.isArray(history[psapId]) ? history[psapId] : [];
+    events.push({
+      status: status,
+      updatedAt: stampedAt,
+      note: STATUS_NOTE[status] || "Status updated",
+    });
+    history[psapId] = events;
+    writeHistory(history);
 
     // Return the merged record so callers can reflect the change immediately.
     var list = getPsaps();
@@ -291,19 +413,64 @@
   }
 
   /**
-   * Clears all status overrides, restoring every PSAP to its seed status.
-   * No-op (beyond returning the seed) when storage is unavailable.
+   * Clears all status overrides AND the persisted history, restoring every
+   * PSAP to its seed status and seed timeline. No-op (beyond returning the
+   * seed) when storage is unavailable.
    */
   function resetPsaps() {
     var storage = getStorage();
     if (storage) {
       try {
         storage.removeItem(STORAGE_KEY);
+        storage.removeItem(HISTORY_KEY);
       } catch (e) {
         /* ignore */
       }
     }
     return getPsaps();
+  }
+
+  /**
+   * Returns the full status history for a PSAP, newest event first. Combines a
+   * synthesized seed timeline with any operator-made changes persisted in
+   * storage. Each event is { status, updatedAt, note }. Returns [] for an
+   * unknown PSAP id.
+   *
+   * @param {string} psapId
+   * @returns {Array<Object>}
+   */
+  function getPsapHistory(psapId) {
+    var def = null;
+    for (var i = 0; i < SEED_DEFS.length; i++) {
+      if (SEED_DEFS[i].id === psapId) {
+        def = SEED_DEFS[i];
+        break;
+      }
+    }
+    if (!def) {
+      return [];
+    }
+    var now = Date.now();
+    var events = buildSeedHistory(def, now);
+
+    var stored = readHistory()[psapId];
+    if (Array.isArray(stored)) {
+      stored.forEach(function (e) {
+        if (e && ALLOWED_STATUSES.indexOf(e.status) !== -1 && e.updatedAt) {
+          events.push({
+            status: e.status,
+            updatedAt: e.updatedAt,
+            note: e.note || STATUS_NOTE[e.status] || "Status updated",
+          });
+        }
+      });
+    }
+
+    // Newest first, so the most recent change is at the top of the timeline.
+    events.sort(function (a, b) {
+      return Date.parse(b.updatedAt) - Date.parse(a.updatedAt);
+    });
+    return events;
   }
 
   /**
@@ -328,10 +495,12 @@
     getPsaps: getPsaps,
     getPsapForOutage: getPsapForOutage,
     setPsapStatus: setPsapStatus,
+    getPsapHistory: getPsapHistory,
     resetPsaps: resetPsaps,
-    // Exposed for tests / callers that want the allowed status list + key.
+    // Exposed for tests / callers that want the allowed status list + keys.
     ALLOWED_STATUSES: ALLOWED_STATUSES,
     STORAGE_KEY: STORAGE_KEY,
+    HISTORY_KEY: HISTORY_KEY,
   };
 
   // Attach to the browser global so <script>-loaded modules can read it.

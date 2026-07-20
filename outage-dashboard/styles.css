@@ -1260,6 +1260,21 @@ h3 {
   background: #d21524;
 }
 
+/* Link from a reportable-outage card to the PSAP page, pre-filtered to that
+ * outage's PSAP. Sits at the far right of the action row. */
+.report-psap__link {
+  margin-left: auto;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.report-psap__link:hover {
+  text-decoration: underline;
+}
+
 /* Live-demo controls in the header. */
 .demo-controls {
   display: inline-flex;
@@ -1781,6 +1796,20 @@ h3 {
   color: var(--sev-major-fg);
 }
 
+/* Reached 900k but PSAP NOT notified — the most urgent state (critical red). */
+.psap-badge--reached_not_notified {
+  background: var(--sev-critical-bg);
+  color: var(--sev-critical-fg);
+  border-color: var(--sev-critical-bd);
+}
+
+/* Reached 900k and PSAP notified — resolved (green). */
+.psap-badge--reached_notified {
+  background: rgba(52, 209, 122, 0.14);
+  color: var(--live);
+  border-color: rgba(52, 209, 122, 0.4);
+}
+
 .psap-badge--not_required {
   background: var(--bg-elevated);
   color: var(--text-muted);
@@ -1917,6 +1946,45 @@ h3 {
   color: var(--text-dim);
 }
 
+/* PSAP status-history timeline inside the management modal (newest first). */
+.psap-history {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.psap-history__item {
+  display: grid;
+  grid-template-columns: 128px auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.psap-history__item:last-child {
+  border-bottom: none;
+}
+
+.psap-history__time {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.psap-history__badge {
+  justify-self: start;
+}
+
+.psap-history__note {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 .psap-modal__header {
   background: linear-gradient(135deg, #123a5e, #1d5f92);
 }
@@ -1967,6 +2035,14 @@ h3 {
 
 .psap-summary__tile--not_notified {
   border-left-color: var(--sev-major-fg);
+}
+
+.psap-summary__tile--reached_not_notified {
+  border-left-color: var(--sev-critical-fg);
+}
+
+.psap-summary__tile--reached_notified {
+  border-left-color: var(--live);
 }
 
 .psap-summary__tile--not_required {

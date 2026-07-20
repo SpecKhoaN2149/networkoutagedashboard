@@ -30,8 +30,10 @@
 
   // Human-readable PSAP status labels (mirrors psapData.js statuses).
   var PSAP_STATUS_LABEL = {
-    notified: "Notified",
+    reached_not_notified: "900k \u00b7 Not notified",
     not_notified: "Not notified",
+    reached_notified: "900k \u00b7 Notified",
+    notified: "Notified",
   };
 
   // The most recent outage list rendered into the modal, so the "Send PSAP
@@ -53,7 +55,7 @@
 
   /** True when a PSAP status counts as "reported" (notified). */
   function isReported(status) {
-    return status === "notified";
+    return status === "notified" || status === "reached_notified";
   }
 
   function isReportable(o) {
@@ -186,6 +188,14 @@
           var status = psap ? psap.status : null;
           var reported = isReported(status);
 
+          // Link to the PSAP status page, pre-filtered to just this outage's
+          // PSAP (see psapPage.applyUrlFilter).
+          var psapLink = psap
+            ? '<a class="report-psap__link" href="psap.html?v=29&psap=' +
+              encodeURIComponent(psap.id) +
+              '">View PSAP status \u2192</a>'
+            : "";
+
           // PSAP reporting action row: shows whether the affected 911/PSAP has
           // been notified, with a one-click "Send PSAP alert" when it has not.
           var psapRow;
@@ -195,6 +205,7 @@
               '<span class="report-psap report-psap--sent">\u2713 PSAP alert sent' +
               (psap ? " \u2014 " + escapeHtml(psap.name) : "") +
               "</span>" +
+              psapLink +
               "</div>";
           } else {
             psapRow =
@@ -205,6 +216,7 @@
                   escapeHtml(psap.id) +
                   '">Send PSAP alert</button>'
                 : "") +
+              psapLink +
               "</div>";
           }
 
@@ -342,7 +354,9 @@
         return;
       }
       try {
-        PsapData.setPsapStatus(psapId, "notified");
+        // These outages are all at/over the 900k threshold, so notifying the
+        // PSAP moves it to the "reached + notified" state.
+        PsapData.setPsapStatus(psapId, "reached_notified");
       } catch (e) {
         return;
       }

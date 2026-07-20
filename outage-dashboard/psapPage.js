@@ -3,9 +3,9 @@
  * Spectrum outage dashboard mockup.
  *
  * Renders two things into psap.html:
- *   - Summary counts by status (Notified / Not notified).
+ *   - Summary counts by status (900k reached / notification state).
  *   - A table of all PSAPs joined to their linked outage, sorted so the most
- *     actionable rows (not notified, then notified) surface near the top.
+ *     actionable rows (reached 900k + not notified) surface near the top.
  *
  * Buildless / browser-only: loaded via a plain <script> tag on psap.html and
  * attaches its exports to `window.PsapPage`. It reads window.PsapData and
@@ -19,12 +19,19 @@
   var TABLE_ID = "psap-table";
 
   // Display order for the summary tiles + sort priority (lower = higher up).
-  // "Not notified" is the actionable state, so it surfaces first.
-  var STATUS_ORDER = ["not_notified", "notified"];
+  // The most urgent state (reached 900k but PSAP still unaware) surfaces first.
+  var STATUS_ORDER = [
+    "reached_not_notified",
+    "not_notified",
+    "reached_notified",
+    "notified",
+  ];
 
   var STATUS_LABEL = {
-    notified: "Notified",
+    reached_not_notified: "900k \u00b7 Not notified",
     not_notified: "Not notified",
+    reached_notified: "900k \u00b7 Notified",
+    notified: "Notified",
   };
 
   // Shared constants (status list). Browser global first, Node require fallback
@@ -33,18 +40,33 @@
     (global && global.DashboardConstants) ||
     (typeof require !== "undefined" ? require("./constants") : undefined);
 
-  var PSAP_STATUSES = (C && C.PSAP_STATUSES) || ["notified", "not_notified"];
+  var PSAP_STATUSES =
+    (C && C.PSAP_STATUSES) || [
+      "reached_not_notified",
+      "not_notified",
+      "reached_notified",
+      "notified",
+    ];
 
   var PSAP_STATUS_TIP =
-    "PSAP = the local 911 call center. Notified = the outage has been " +
-    "reported to the PSAP; Not notified = the PSAP has not been alerted yet.";
+    "PSAP = the local 911 call center. \u201cNotified\u201d means the outage " +
+    "has been reported to the PSAP; \u201cNot notified\u201d means it has not. " +
+    "\u201c900k\u201d marks a PSAP whose outage has reached the 900,000 " +
+    "user-minute FCC reporting threshold.";
 
   // Per-status descriptions for the summary tiles' info "i".
   var STATUS_TIP = {
-    notified:
-      "The outage has been reported to the PSAP / 911 authority.",
+    reached_not_notified:
+      "The outage has reached the 900k user-minute FCC threshold but the " +
+      "PSAP / 911 authority has NOT been notified yet. This is the most " +
+      "urgent state — notify the PSAP now.",
     not_notified:
       "The PSAP / 911 authority has not been notified of this outage yet.",
+    reached_notified:
+      "The outage has reached the 900k user-minute FCC threshold and the " +
+      "PSAP / 911 authority has been notified.",
+    notified:
+      "The outage has been reported to the PSAP / 911 authority.",
   };
 
   /**
@@ -119,6 +141,24 @@
       iso = C.thresholdReachedTime(outage, Date.now());
     }
     return iso ? formatUpdated(iso) : "Not yet reached";
+  }
+
+  /**
+   * Resolves an outage's live user-minutes (users affected × minutes of
+   * duration): the annotated field when present, otherwise computed from the
+   * shared constants helper. Returns 0 when there is no outage.
+   */
+  function userMinutesValue(outage) {
+    if (!outage) {
+      return 0;
+    }
+    if (typeof outage.userMinutes === "number" && isFinite(outage.userMinutes)) {
+      return outage.userMinutes;
+    }
+    if (C && typeof C.computeUserMinutes === "function") {
+      return C.computeUserMinutes(outage, Date.now());
+    }
+    return 0;
   }
 
   function statusBadgeHtml(status) {
@@ -315,6 +355,10 @@
         "Lost users",
         outage ? formatNumber(outage.currentLostUsers) : "\u2014"
       ) +
+      detailRow(
+        "Lost user-minutes",
+        outage ? formatNumber(row.userMinutes) + " user-min" : "\u2014"
+      ) +
       detailRow("Threshold reached", thresholdReachedLabel(outage)) +
       detailRow("Current status", statusBadgeHtml(psap.status)) +
       detailRow("Last updated", formatUpdated(psap.updatedAt)) +
@@ -325,7 +369,49 @@
       '<div class="modal__section-title">Set notification status' +
       tip(PSAP_STATUS_TIP) +
       "</div>" +
-      statusOptionsHtml(psap.status);
+      statusOptionsHtml(psap.status) +
+      historyHtml(psap.id);
+  }
+
+  /**
+   * Builds the "Status history" timeline for a PSAP (newest first): each event
+   * shows its time, the status badge, and a short note. Returns "" when no
+   * history is available (or the data module lacks getPsapHistory).
+   */
+  function historyHtml(psapId) {
+    var PsapData = global.PsapData;
+    if (!PsapData || typeof PsapData.getPsapHistory !== "function") {
+      return "";
+    }
+    var events = PsapData.getPsapHistory(psapId);
+    if (!events || !events.length) {
+      return "";
+    }
+    var items = events
+      .map(function (e) {
+        return (
+          '<li class="psap-history__item">' +
+          '<span class="psap-history__time">' +
+          formatUpdated(e.updatedAt) +
+          "</span>" +
+          '<span class="psap-history__badge">' +
+          statusBadgeHtml(e.status) +
+          "</span>" +
+          (e.note
+            ? '<span class="psap-history__note">' +
+              escapeHtml(e.note) +
+              "</span>"
+            : "") +
+          "</li>"
+        );
+      })
+      .join("");
+    return (
+      '<div class="modal__section-title">Status history</div>' +
+      '<ol class="psap-history">' +
+      items +
+      "</ol>"
+    );
   }
 
   /** Opens the management modal for a PSAP id. */
@@ -384,6 +470,7 @@
         psap: psap,
         outage: outage,
         lostUsers: outage ? outage.currentLostUsers : 0,
+        userMinutes: outage ? userMinutesValue(outage) : 0,
       };
     });
 
@@ -413,7 +500,10 @@
       return;
     }
 
-    var counts = { notified: 0, not_notified: 0 };
+    var counts = {};
+    STATUS_ORDER.forEach(function (s) {
+      counts[s] = 0;
+    });
     rows.forEach(function (row) {
       var s = row.psap.status;
       if (counts[s] === undefined) {
@@ -448,6 +538,13 @@
     { label: "County / State", filter: { type: "text", key: "countyState", placeholder: "Filter county / state" } },
     { label: "Linked outage", filter: { type: "text", key: "linkedOutage", placeholder: "Filter outage" } },
     { label: "Lost users", filter: null },
+    {
+      label: "Lost user-min",
+      tip:
+        "Lost user-minutes = users affected \u00d7 minutes of duration. The " +
+        "outage becomes FCC-reportable once this reaches 900,000.",
+      filter: null,
+    },
     {
       label: "Status",
       tip: PSAP_STATUS_TIP,
@@ -565,6 +662,7 @@
         var outage = row.outage;
         var outageName = outage ? outage.name : "\u2014";
         var lost = outage ? formatNumber(outage.currentLostUsers) : "\u2014";
+        var userMin = outage ? formatNumber(row.userMinutes) : "\u2014";
         return (
           '<tr class="psap-row" data-psap-id="' +
           escapeHtml(psap.id) +
@@ -582,6 +680,9 @@
           "</td>" +
           '<td class="num">' +
           lost +
+          "</td>" +
+          '<td class="num">' +
+          userMin +
           "</td>" +
           "<td>" +
           statusBadgeHtml(psap.status) +
@@ -661,6 +762,67 @@
   }
 
   /**
+   * When the page is opened from an outage link or the FCC red alert, the URL
+   * carries a `?psap=<id>` (or `?outage=<id>`) query param. This resolves it to
+   * the matching PSAP and pre-fills the PSAP-name column filter so the table is
+   * automatically narrowed to just that outage's PSAP. The filter stays visible
+   * and clearable, so the operator can widen it back to all PSAPs.
+   */
+  function applyUrlFilter() {
+    if (typeof document === "undefined") {
+      return;
+    }
+    var search = (global.location && global.location.search) || "";
+    if (!search || typeof URLSearchParams === "undefined") {
+      return;
+    }
+    var params;
+    try {
+      params = new URLSearchParams(search);
+    } catch (e) {
+      return;
+    }
+    var psapId = params.get("psap");
+    var outageId = params.get("outage");
+    if (!psapId && !outageId) {
+      return;
+    }
+    var PsapData = global.PsapData;
+    if (!PsapData) {
+      return;
+    }
+    var targetName = null;
+    if (psapId && typeof PsapData.getPsaps === "function") {
+      var list = PsapData.getPsaps();
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id === psapId) {
+          targetName = list[i].name;
+          break;
+        }
+      }
+    }
+    if (
+      !targetName &&
+      outageId &&
+      typeof PsapData.getPsapForOutage === "function"
+    ) {
+      var linked = PsapData.getPsapForOutage(outageId);
+      if (linked) {
+        targetName = linked.name;
+      }
+    }
+    if (!targetName) {
+      return;
+    }
+    var input = document.querySelector('[data-col-filter="name"]');
+    if (input) {
+      input.value = targetName;
+    }
+    readPsapFilterControls();
+    applyPsapFilter();
+  }
+
+  /**
    * Renders the whole page: the summary reflects ALL PSAPs; the table reflects
    * the active filter.
    */
@@ -695,6 +857,10 @@
 
   function init() {
     render();
+
+    // Auto-filter to a single PSAP when arrived at from an outage link or the
+    // FCC red alert (?psap=<id> / ?outage=<id>).
+    applyUrlFilter();
 
     // Wire the per-column PSAP filter row. Delegated on the table container so
     // it survives tbody re-renders. Text inputs use `input`; selects `change`.

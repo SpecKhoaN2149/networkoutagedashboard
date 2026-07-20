@@ -120,9 +120,19 @@
   ];
 
   // Allowed PSAP reporting statuses. Mirrors psapData.js status values and
-  // powers the per-column PSAP status filters on both tables. Simplified to a
-  // binary: an outage's PSAP has either been notified or it has not.
-  var PSAP_STATUSES = ["notified", "not_notified"];
+  // powers the per-column PSAP status filters on both tables. Two dimensions
+  // are encoded: whether the linked outage has reached the 900k user-minute
+  // FCC reporting threshold, and whether the PSAP has been notified.
+  //   - reached_not_notified : over 900k, PSAP NOT notified (critical)
+  //   - not_notified         : below 900k, PSAP not notified
+  //   - reached_notified     : over 900k, PSAP notified
+  //   - notified             : below 900k, PSAP notified
+  var PSAP_STATUSES = [
+    "reached_not_notified",
+    "not_notified",
+    "reached_notified",
+    "notified",
+  ];
 
   /**
    * Returns true if `lat`/`lng` are finite numbers within absolute geographic

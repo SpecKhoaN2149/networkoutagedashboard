@@ -51,8 +51,10 @@
 
   // Friendly labels for PSAP status option/badge text.
   var PSAP_STATUS_LABEL = {
-    notified: "Notified",
+    reached_not_notified: "900k \u00b7 Not notified",
     not_notified: "Not notified",
+    reached_notified: "900k \u00b7 Notified",
+    notified: "Notified",
   };
 
   // Column model in display order. `filter` describes the per-column filter

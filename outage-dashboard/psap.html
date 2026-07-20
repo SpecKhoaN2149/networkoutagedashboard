@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Spectrum — PSAP / 911 Status</title>
+    <title>Spectrum — Notification Status</title>
 
     <!-- Shared dashboard styles (PSAP-page styles live here too) -->
     <link rel="stylesheet" href="styles.css?v=29" />
@@ -18,7 +18,7 @@
           <h1 class="header__title">
             <span class="brand-spectrum">Spectrum</span>
           </h1>
-          <span class="header__subtitle">PSAP / 911 Status</span>
+          <span class="header__subtitle">Notification Status</span>
         </div>
         <div class="header__meta">
           <a class="header__nav-link" href="index.html?v=29">&larr; Back to dashboard</a>
@@ -31,10 +31,10 @@
       </header>
 
       <!-- Management-view subtitle: this page lets an operator move PSAPs
-           between reporting statuses (persisted client-side in localStorage). -->
+           between notification statuses and review their history. -->
       <p class="page-subtitle" id="psap-subtitle">
         Manage PSAP / 911 notification status — click a PSAP row to open its
-        management panel and change its status (saved in your browser).
+        management panel, review its status history, and update its status.
       </p>
 
       <!-- Summary counts by status -->
@@ -57,7 +57,7 @@
       <!-- Full PSAP table -->
       <div class="panel psap-table-panel">
         <div class="panel__header">
-          <h2 class="panel__title">All PSAPs — 911 reporting status</h2>
+          <h2 class="panel__title">All PSAPs — notification status</h2>
         </div>
         <div class="panel__body">
           <div class="psap-table-wrap" id="psap-table">

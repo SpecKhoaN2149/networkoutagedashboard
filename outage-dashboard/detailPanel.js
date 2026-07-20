@@ -32,8 +32,10 @@
 
   // Human-readable label per PSAP status.
   var STATUS_LABEL = {
-    notified: "Notified",
+    reached_not_notified: "900k \u00b7 Not notified",
     not_notified: "Not notified",
+    reached_notified: "900k \u00b7 Notified",
+    notified: "Notified",
   };
 
   function isReportable(outage) {
@@ -157,8 +159,10 @@
   // Concise plain-language descriptions surfaced via the "i" tooltips.
   var TIP = {
     psapStatus:
-      "PSAP = the local 911 call center. Notified = the outage has been " +
-      "reported to the PSAP; Not notified = the PSAP has not been alerted yet.",
+      "PSAP = the local 911 call center. \u201cNotified\u201d = the outage has " +
+      "been reported to the PSAP; \u201cNot notified\u201d = it has not. " +
+      "\u201c900k\u201d marks a PSAP whose outage reached the 900,000 " +
+      "user-minute FCC reporting threshold.",
     fcc:
       "Outages reaching 900,000 user-minutes (users affected \u00d7 minutes of " +
       "duration) must be reported to the FCC (NORS) and the local 911/PSAP " +
@@ -457,7 +461,11 @@
       '<div class="detail-section detail-section--psap">' +
       '<div class="detail-section__title">PSAP / 911</div>' +
       psapBody +
-      '<a class="detail-psap-link" href="psap.html?v=29">View all PSAPs \u2192</a>' +
+      (psap
+        ? '<a class="detail-psap-link" href="psap.html?v=29&psap=' +
+          encodeURIComponent(psap.id) +
+          '">View this PSAP \u2192</a>'
+        : '<a class="detail-psap-link" href="psap.html?v=29">View all PSAPs \u2192</a>') +
       "</div>" +
       "</div>";
 
