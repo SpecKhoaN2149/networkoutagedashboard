@@ -8,14 +8,13 @@
  * the test runner without any build step (mirrors mockData.js / constants.js).
  *
  * Each PSAP corresponds to exactly one seed outage region and carries a
- * reporting `status` used across the detail panel and the PSAP status page.
- * The status encodes two things: whether the linked outage has reached the
- * 900k user-minute FCC reporting threshold, and whether the PSAP has been
- * notified:
- *   - "reached_not_notified" — over 900k, PSAP NOT notified yet (critical/red)
- *   - "not_notified"         — below 900k, PSAP not notified (amber/alert)
- *   - "reached_notified"     — over 900k, PSAP notified (resolved/green)
- *   - "notified"             — below 900k, PSAP notified (blue)
+ * reporting `status` — the operator-controlled NOTIFICATION state:
+ *   - "notified"     — the outage has been reported to the PSAP
+ *   - "not_notified" — the PSAP has not been notified yet
+ *
+ * The "reached 900k" dimension is NOT stored here: it is derived live from the
+ * linked outage's user-minutes (see DashboardConstants.psapDisplayStatus) so
+ * the displayed badge always matches the user-minutes shown alongside it.
  */
 (function (global) {
   "use strict";
@@ -35,7 +34,7 @@
       county: "New York County",
       state: "NY",
       phone: "911 / +1-212-555-0101",
-      status: "reached_not_notified",
+      status: "not_notified",
       linkedOutageId: "otg-001",
       updatedMinutesAgo: 12,
     },
@@ -55,7 +54,7 @@
       county: "Cook County",
       state: "IL",
       phone: "911 / +1-312-555-0103",
-      status: "reached_notified",
+      status: "not_notified",
       linkedOutageId: "otg-003",
       updatedMinutesAgo: 27,
     },
@@ -85,7 +84,7 @@
       county: "Fulton County",
       state: "GA",
       phone: "911 / +1-404-555-0106",
-      status: "reached_not_notified",
+      status: "not_notified",
       linkedOutageId: "otg-006",
       updatedMinutesAgo: 19,
     },
@@ -105,7 +104,7 @@
       county: "Los Angeles County",
       state: "CA",
       phone: "911 / +1-213-555-0108",
-      status: "reached_notified",
+      status: "notified",
       linkedOutageId: "otg-008",
       updatedMinutesAgo: 8,
     },
@@ -147,15 +146,22 @@
   // full audit trail rather than just the latest status.
   var HISTORY_KEY = "psap-status-history";
 
-  // The allowed reporting statuses. Kept local so this module stays
-  // self-contained (and testable under Node/Vitest without other modules).
-  // Each combines "reached 900k" with the notification state.
-  var ALLOWED_STATUSES = [
-    "reached_not_notified",
-    "not_notified",
-    "reached_notified",
-    "notified",
-  ];
+  // The allowed (stored) reporting statuses — the notification dimension only.
+  // Kept local so this module stays self-contained (and testable under
+  // Node/Vitest without other modules). The "reached 900k" dimension is derived
+  // at display time, never stored.
+  var ALLOWED_STATUSES = ["notified", "not_notified"];
+
+  /**
+   * Normalizes a possibly-combined display status ("reached_notified" /
+   * "reached_not_notified") down to the stored notification dimension, so
+   * callers may pass either form to setPsapStatus.
+   */
+  function normalizeNotifyStatus(status) {
+    if (status === "reached_notified") return "notified";
+    if (status === "reached_not_notified") return "not_notified";
+    return status;
+  }
 
   /**
    * Resolves a browser-like localStorage, preferring a bare `localStorage`
@@ -255,12 +261,10 @@
     }
   }
 
-  // Short human-readable note per status, used to annotate history events.
+  // Short human-readable note per notification status, used to annotate
+  // history events.
   var STATUS_NOTE = {
-    reached_not_notified:
-      "Reached 900k user-minutes — PSAP not yet notified",
     not_notified: "PSAP not notified",
-    reached_notified: "Reached 900k user-minutes — PSAP notified",
     notified: "PSAP notified",
   };
 
@@ -269,15 +273,16 @@
   }
 
   /**
-   * Synthesizes a plausible seed timeline for a PSAP that ends at its current
-   * seed status, so the history view always has meaningful context even before
-   * an operator makes any change. Returns events oldest-first.
+   * Synthesizes a plausible seed notification timeline for a PSAP that ends at
+   * its current seed status, so the history view always has meaningful context
+   * even before an operator makes any change. Returns events oldest-first.
    */
   function buildSeedHistory(def, now) {
     var events = [];
     var last = def.updatedMinutesAgo;
 
-    // 1) Initial detection, well before the last update.
+    // 1) Initial detection — every outage starts "not notified", well before
+    //    the last update.
     events.push({
       status: "not_notified",
       updatedAt: isoFromMinutesAgo(now, last + 240),
@@ -285,27 +290,13 @@
       seed: true,
     });
 
-    // 2) If the current status says the outage crossed 900k, record that.
-    if (
-      def.status === "reached_not_notified" ||
-      def.status === "reached_notified"
-    ) {
+    // 2) If the PSAP is currently notified, record the notification as the
+    //    latest seed event.
+    if (def.status === "notified") {
       events.push({
-        status: "reached_not_notified",
-        updatedAt: isoFromMinutesAgo(now, last + 90),
-        note: "Crossed 900k user-minute FCC reporting threshold",
-        seed: true,
-      });
-    }
-
-    // 3) The current seed status as the latest seed event (skip if identical
-    //    to the one just pushed so we do not duplicate).
-    var prev = events[events.length - 1];
-    if (!prev || prev.status !== def.status) {
-      events.push({
-        status: def.status,
+        status: "notified",
         updatedAt: isoFromMinutesAgo(now, last),
-        note: STATUS_NOTE[def.status] || "Status updated",
+        note: STATUS_NOTE.notified,
         seed: true,
       });
     }
@@ -359,16 +350,19 @@
   }
 
   /**
-   * Overrides a PSAP's reporting status and persists it to localStorage as
+   * Overrides a PSAP's notification status and persists it to localStorage as
    * { status, updatedAt: <now ISO> }. Returns the updated (merged) PSAP record,
    * or null if no PSAP matches the given id. Throws a RangeError when `status`
-   * is not one of the four allowed values.
+   * is not a recognized value. A combined display status ("reached_notified" /
+   * "reached_not_notified") is accepted and normalized to its notification
+   * dimension, since "reached 900k" is derived, not stored.
    *
    * @param {string} psapId
-   * @param {string} status - one of "notified" | "not_notified".
+   * @param {string} status - "notified" | "not_notified" (or a reached_* form).
    * @returns {Object|null}
    */
   function setPsapStatus(psapId, status) {
+    status = normalizeNotifyStatus(status);
     if (ALLOWED_STATUSES.indexOf(status) === -1) {
       throw new RangeError(
         "Invalid PSAP status: " +

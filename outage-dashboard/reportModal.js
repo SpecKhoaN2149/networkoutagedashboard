@@ -187,6 +187,11 @@
           var psap = psapForOutage(o);
           var status = psap ? psap.status : null;
           var reported = isReported(status);
+          // Derived display status (these cards are all at/over 900k).
+          var displayStatus =
+            status && C && typeof C.psapDisplayStatus === "function"
+              ? C.psapDisplayStatus(status, isReportable(o))
+              : status;
 
           // Link to the PSAP status page, pre-filtered to just this outage's
           // PSAP (see psapPage.applyUrlFilter).
@@ -239,7 +244,9 @@
             stat(
               "PSAP status",
               escapeHtml(
-                status ? PSAP_STATUS_LABEL[status] || status : "\u2014"
+                displayStatus
+                  ? PSAP_STATUS_LABEL[displayStatus] || displayStatus
+                  : "\u2014"
               )
             ) +
             "</div>" +
@@ -354,9 +361,10 @@
         return;
       }
       try {
-        // These outages are all at/over the 900k threshold, so notifying the
-        // PSAP moves it to the "reached + notified" state.
-        PsapData.setPsapStatus(psapId, "reached_notified");
+        // Set the notification dimension only; because these outages are all
+        // at/over 900k user-minutes, the displayed status derives to
+        // "900k · Notified" automatically.
+        PsapData.setPsapStatus(psapId, "notified");
       } catch (e) {
         return;
       }

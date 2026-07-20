@@ -285,6 +285,7 @@
      */
     function annotateWithPsap(list) {
       var psapIndex = buildPsapIndex();
+      var C = ns("DashboardConstants");
       return (Array.isArray(list) ? list : []).map(function (o) {
         var status = psapIndex.byOutage[o.id];
         if (!status && o.psapId) {
@@ -294,7 +295,21 @@
         for (var k in o) {
           if (Object.prototype.hasOwnProperty.call(o, k)) copy[k] = o[k];
         }
-        copy.psapStatus = status || null;
+        // Derive the DISPLAYED status: combine the stored notify state with
+        // whether the outage has actually reached 900k user-minutes, so the
+        // table badge always matches the user-minute figure.
+        if (status && C && typeof C.psapDisplayStatus === "function") {
+          var um =
+            typeof copy.userMinutes === "number" && isFinite(copy.userMinutes)
+              ? copy.userMinutes
+              : typeof C.computeUserMinutes === "function"
+              ? C.computeUserMinutes(copy, Date.now())
+              : 0;
+          var reached = um >= (C.FCC_USER_MINUTES_THRESHOLD || 900000);
+          copy.psapStatus = C.psapDisplayStatus(status, reached);
+        } else {
+          copy.psapStatus = status || null;
+        }
         return copy;
       });
     }

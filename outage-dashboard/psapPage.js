@@ -69,6 +69,35 @@
       "The outage has been reported to the PSAP / 911 authority.",
   };
 
+  // The operator-controlled NOTIFICATION dimension shown in the modal editor.
+  // The "reached 900k" dimension is derived from live user-minutes, so the
+  // operator only ever sets notified / not notified here.
+  var NOTIFY_ORDER = ["not_notified", "notified"];
+
+  // The FCC reporting threshold in user-minutes (users affected × minutes).
+  var USER_MIN_THRESHOLD = (C && C.FCC_USER_MINUTES_THRESHOLD) || 900000;
+
+  /**
+   * Derives the DISPLAYED PSAP status for a row by combining the stored
+   * notification state with whether the linked outage has actually reached the
+   * 900k user-minute threshold. This keeps the badge in lockstep with the
+   * "Lost user-min" column — a PSAP can only read "900k …" when its outage is
+   * genuinely at/over 900k user-minutes.
+   */
+  function displayStatusFor(baseStatus, userMinutes) {
+    var reached = Number(userMinutes) >= USER_MIN_THRESHOLD;
+    if (C && typeof C.psapDisplayStatus === "function") {
+      return C.psapDisplayStatus(baseStatus, reached);
+    }
+    // Fallback if constants are unavailable.
+    var notified =
+      baseStatus === "notified" || baseStatus === "reached_notified";
+    if (reached) {
+      return notified ? "reached_notified" : "reached_not_notified";
+    }
+    return notified ? "notified" : "not_notified";
+  }
+
   /**
    * Returns the reusable info-tip markup for `text`, or "" when the InfoTip
    * helper is unavailable.
@@ -279,8 +308,10 @@
    * status, with the PSAP's current status highlighted (.is-active).
    */
   function statusOptionsHtml(current) {
-    var active = current || "not_notified";
-    var buttons = STATUS_ORDER.map(function (status) {
+    // The operator only sets the notification dimension; "reached 900k" is
+    // derived. Normalize any combined value down to notified / not_notified.
+    var active = current === "notified" ? "notified" : "not_notified";
+    var buttons = NOTIFY_ORDER.map(function (status) {
       return (
         '<button type="button" class="psap-status-option psap-status-option--' +
         escapeHtml(status) +
@@ -360,7 +391,7 @@
         outage ? formatNumber(row.userMinutes) + " user-min" : "\u2014"
       ) +
       detailRow("Threshold reached", thresholdReachedLabel(outage)) +
-      detailRow("Current status", statusBadgeHtml(psap.status)) +
+      detailRow("Current status", statusBadgeHtml(row.displayStatus)) +
       detailRow("Last updated", formatUpdated(psap.updatedAt)) +
       "</div>";
 
@@ -466,17 +497,20 @@
     var index = outageIndex();
     var rows = PsapData.getPsaps().map(function (psap) {
       var outage = index[psap.linkedOutageId] || null;
+      var um = outage ? userMinutesValue(outage) : 0;
       return {
         psap: psap,
         outage: outage,
         lostUsers: outage ? outage.currentLostUsers : 0,
-        userMinutes: outage ? userMinutesValue(outage) : 0,
+        userMinutes: um,
+        // Derived (never stored): combines notify state + reached-900k.
+        displayStatus: displayStatusFor(psap.status, um),
       };
     });
 
     rows.sort(function (a, b) {
-      var pa = STATUS_ORDER.indexOf(a.psap.status);
-      var pb = STATUS_ORDER.indexOf(b.psap.status);
+      var pa = STATUS_ORDER.indexOf(a.displayStatus);
+      var pb = STATUS_ORDER.indexOf(b.displayStatus);
       if (pa === -1) pa = STATUS_ORDER.length;
       if (pb === -1) pb = STATUS_ORDER.length;
       if (pa !== pb) {
@@ -505,7 +539,7 @@
       counts[s] = 0;
     });
     rows.forEach(function (row) {
-      var s = row.psap.status;
+      var s = row.displayStatus;
       if (counts[s] === undefined) {
         counts[s] = 0;
       }
@@ -685,7 +719,7 @@
           userMin +
           "</td>" +
           "<td>" +
-          statusBadgeHtml(psap.status) +
+          statusBadgeHtml(row.displayStatus) +
           "</td>" +
           '<td class="psap-phone">' +
           escapeHtml(psap.phone) +
@@ -739,8 +773,17 @@
     var OF = global.OutageFilters;
     var filteredRows;
     if (OF && typeof OF.filterPsaps === "function") {
+      // Filter on the DISPLAYED status (which encodes reached-900k), not the
+      // stored notify state, so the Status column filter matches the badges.
       var psaps = allRows.map(function (r) {
-        return r.psap;
+        var p = {};
+        for (var k in r.psap) {
+          if (Object.prototype.hasOwnProperty.call(r.psap, k)) {
+            p[k] = r.psap[k];
+          }
+        }
+        p.status = r.displayStatus;
+        return p;
       });
       var lookup = {};
       allRows.forEach(function (r) {

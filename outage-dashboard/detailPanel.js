@@ -402,9 +402,19 @@
     // what "reported" means, so showing both said the same thing twice.
     var psapBody;
     if (psap) {
+      // Derive the displayed status: combine the stored notify state with
+      // whether this outage has actually reached 900k user-minutes.
+      var psapReached =
+        C && typeof C.isReportable === "function"
+          ? C.isReportable({ userMinutes: userMinutesValue(outage) })
+          : userMinutesValue(outage) >= 900000;
+      var psapDisplay =
+        C && typeof C.psapDisplayStatus === "function"
+          ? C.psapDisplayStatus(psap.status, psapReached)
+          : psap.status;
       psapBody =
         fieldRowHtml("PSAP", escapeHtml(psap.name)) +
-        fieldRowHtml("PSAP status", statusBadgeHtml(psap.status), tip(TIP.psapStatus)) +
+        fieldRowHtml("PSAP status", statusBadgeHtml(psapDisplay), tip(TIP.psapStatus)) +
         fieldRowHtml(
           "County / state",
           escapeHtml(psap.county + ", " + psap.state)

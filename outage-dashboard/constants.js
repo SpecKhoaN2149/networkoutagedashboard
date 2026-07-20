@@ -330,6 +330,28 @@
   }
 
   /**
+   * Derives the DISPLAYED PSAP status by combining the operator-controlled
+   * notification state (`baseStatus`: "notified" | "not_notified") with a
+   * `reached` boolean that says whether the linked outage has crossed the 900k
+   * user-minute FCC threshold. The "reached" dimension is always derived from
+   * live user-minutes (never stored), so the badge can never disagree with the
+   * user-minutes shown alongside it. Accepts an already-combined value and
+   * re-derives it, so callers can pass either form.
+   *
+   * @param {string} baseStatus
+   * @param {boolean} reached
+   * @returns {"reached_not_notified"|"not_notified"|"reached_notified"|"notified"}
+   */
+  function psapDisplayStatus(baseStatus, reached) {
+    var notified =
+      baseStatus === "notified" || baseStatus === "reached_notified";
+    if (reached) {
+      return notified ? "reached_notified" : "reached_not_notified";
+    }
+    return notified ? "notified" : "not_notified";
+  }
+
+  /**
    * Clamps `value` to the inclusive [min, max] range. Shared helper reused by
    * the size and color scales for domain/endpoint clamping.
    */
@@ -361,6 +383,7 @@
     isReportable: isReportable,
     computeUserMinutes: computeUserMinutes,
     thresholdReachedTime: thresholdReachedTime,
+    psapDisplayStatus: psapDisplayStatus,
     clamp: clamp,
   };
 
