@@ -15,9 +15,11 @@
  *     the bubble color toward red as it approaches 900k user-minutes.
  *   - CROSS 900k user-minutes: once the target reaches the threshold it becomes
  *     FCC reportable (the on-map red alert appears) while its linked PSAP is
- *     still "not_notified" — reached the threshold but NOT yet reported.
- *   - REPORT: the operator opens the FCC alert and clicks "Send PSAP alert",
- *     which persists the PSAP status as "notified" (reported).
+ *     momentarily "not_notified" — reached the threshold but not yet reported.
+ *   - AUTO-REPORT: the platform then notifies the affected PSAP AUTOMATICALLY
+ *     (app.js.autoNotifyReportablePsaps) — no manual "Send PSAP alert" click.
+ *     After a short beat the linked PSAP status flips to "notified" (reported)
+ *     on its own, which the FCC modal shows as "sent automatically".
  *
  * Buildless / browser-only: loaded via a plain <script> tag BEFORE app.js and
  * attaches its api to `window.DemoScenario`. It reads window.MockData,
@@ -221,8 +223,9 @@
   /**
    * Advances the scenario by one step: the target aggregates one more outage
    * (until MAX_COUNT). The first time it reaches the threshold its linked PSAP
-   * is ensured "not_notified" (reached 900k, awaiting reporting) so the
-   * operator can send the alert from the FCC modal. Returns the updated outage
+   * is ensured "not_notified" (reached 900k, awaiting reporting); the platform
+   * then sends the PSAP alert AUTOMATICALLY (app.js), flipping it to
+   * "notified" shortly after — no manual step. Returns the updated outage
    * list, or null when not active.
    */
   function advance() {
@@ -244,8 +247,10 @@
     }
 
     if (justCrossed) {
-      // Reached the FCC threshold but not yet reported -> PSAP "not_notified".
-      // Do NOT clobber a status the operator may have already advanced.
+      // Reached the FCC threshold: mark the PSAP "not_notified" for a beat so
+      // the red alert shows the "automatically notifying…" state before the
+      // platform's auto-notifier (app.js) sends the alert and flips it to
+      // "notified". Do NOT clobber a status that has already advanced.
       var PsapData = ns("PsapData");
       if (PsapData && typeof PsapData.getPsapForOutage === "function") {
         var psap = PsapData.getPsapForOutage(TARGET_ID);

@@ -472,10 +472,10 @@
       '<div class="detail-section__title">PSAP / 911</div>' +
       psapBody +
       (psap
-        ? '<a class="detail-psap-link" href="psap.html?v=29&psap=' +
+        ? '<a class="detail-psap-link" href="psap.html?v=30&psap=' +
           encodeURIComponent(psap.id) +
           '">View this PSAP \u2192</a>'
-        : '<a class="detail-psap-link" href="psap.html?v=29">View all PSAPs \u2192</a>') +
+        : '<a class="detail-psap-link" href="psap.html?v=30">View all PSAPs \u2192</a>') +
       "</div>" +
       "</div>";
 

@@ -1238,26 +1238,26 @@ h3 {
   color: #ffb347;
 }
 
+/* Reached 900k and the platform is AUTOMATICALLY sending the PSAP/911 alert
+ * (no manual click). A brief, self-clearing "in progress" state that gently
+ * pulses before it flips to "sent automatically". */
+.report-psap--auto {
+  color: var(--accent);
+  animation: report-psap-auto-pulse 1s ease-in-out infinite;
+}
+
+@keyframes report-psap-auto-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 .report-psap--sent {
   color: var(--live);
-}
-
-.report-psap__btn {
-  appearance: none;
-  cursor: pointer;
-  margin-left: auto;
-  padding: 6px 14px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #fff;
-  background: #b3121f;
-  border: 1px solid #ff5a68;
-  border-radius: var(--radius-sm);
-  transition: background-color 0.12s ease;
-}
-
-.report-psap__btn:hover {
-  background: #d21524;
 }
 
 /* Link from a reportable-outage card to the PSAP page, pre-filtered to that

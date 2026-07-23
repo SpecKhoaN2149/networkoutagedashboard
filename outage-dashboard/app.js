@@ -30,6 +30,14 @@
   // quicker, so the timer runs faster than the ambient live-drift cadence.
   var DEMO_TICK_INTERVAL_MS = 1400;
 
+  // How long after an outage becomes FCC-reportable the system waits before it
+  // AUTOMATICALLY sends the PSAP / 911 alert. There is no manual "send" step
+  // anymore: the moment an outage crosses the 900k threshold the platform
+  // notifies the linked PSAP itself. The short beat keeps the "auto-notifying…"
+  // state on screen briefly so the automatic hand-off is visible before it
+  // flips to "sent automatically".
+  var AUTO_PSAP_ALERT_DELAY_MS = 1500;
+
   // Map container id (see index.html: <div id="map">).
   var MAP_CONTAINER_ID = "map";
 
@@ -148,6 +156,11 @@
     // return to (the primary), so the detail panel can show a back arrow.
     var backToId = null;
 
+    // PSAP ids the platform has already auto-notified (or scheduled to notify)
+    // for the current run, so the repeating tick never fires the same alert
+    // twice. Cleared when entering/exiting the demo (which resets statuses).
+    var autoNotifiedPsaps = {};
+
     /**
      * Looks up an outage in the current list by id.
      * @param {string} id
@@ -242,9 +255,9 @@
     var columnFilters = {};
 
     // Builds a fresh index of PSAP status by outage id (and by PSAP id) from
-    // the live PsapData store. Rebuilt on demand so a status change made from
-    // the FCC modal ("Send PSAP alert") or the demo is reflected right away in
-    // the table and detail panel.
+    // the live PsapData store. Rebuilt on demand so a status change made by the
+    // automatic PSAP notifier (or the demo) is reflected right away in the
+    // table and detail panel.
     function buildPsapIndex() {
       var byOutage = {};
       var byPsapId = {};
@@ -532,15 +545,9 @@
           ReportModal.open(outages);
         });
       }
-
-      // When a PSAP alert is sent from the modal, refresh the table + detail
-      // panel so the new "notified" status shows immediately (not just on the
-      // next drift tick).
-      if (typeof ReportModal.setPsapAlertHandler === "function") {
-        ReportModal.setPsapAlertHandler(function () {
-          refreshPsapDependentViews();
-        });
-      }
+      // PSAP notification is automatic (see autoNotifyReportablePsaps), which
+      // refreshes the modal itself after it sends an alert — so there is no
+      // manual "send" callback to register here.
     });
 
     /**
@@ -554,6 +561,72 @@
         renderSelectedDetail();
         highlightTableRow(selectedId);
       }
+    }
+
+    /**
+     * Automatically sends the PSAP / 911 alert for every outage that has
+     * reached the 900k FCC reporting threshold whose linked PSAP has not been
+     * notified yet. This replaces the old manual "Send PSAP alert" click: once
+     * an outage becomes reportable the platform schedules the notification
+     * itself (after a short, visible beat) and then refreshes the banner,
+     * table, detail panel, and the FCC modal so the "sent automatically" state
+     * shows immediately. Idempotent per run via `autoNotifiedPsaps`, so the
+     * repeating tick never re-sends an alert. Guarded so a missing global or a
+     * storage hiccup can never break the dashboard loop.
+     */
+    function autoNotifyReportablePsaps() {
+      safely("autoNotifyReportablePsaps", function () {
+        var C = ns("DashboardConstants");
+        var PsapData = ns("PsapData");
+        if (
+          !PsapData ||
+          typeof PsapData.getPsapForOutage !== "function" ||
+          typeof PsapData.setPsapStatus !== "function"
+        ) {
+          return;
+        }
+        var isReportable =
+          C && C.isReportable
+            ? C.isReportable
+            : function (o) {
+                return !!o && o.currentLostUsers >= 900000;
+              };
+
+        (Array.isArray(outages) ? outages : []).forEach(function (o) {
+          if (!isReportable(o)) return;
+          var psap = PsapData.getPsapForOutage(o.id);
+          // Nothing to do when there is no linked PSAP or it is already
+          // notified (reported).
+          if (!psap || psap.status === "notified") return;
+          // Only schedule an auto-send once per PSAP per run.
+          if (autoNotifiedPsaps[psap.id]) return;
+          autoNotifiedPsaps[psap.id] = true;
+
+          var psapId = psap.id;
+          function sendNow() {
+            safely("auto-send PSAP alert", function () {
+              PsapData.setPsapStatus(psapId, "notified");
+            });
+            // Reflect the automatic notification everywhere right away.
+            refreshPsapDependentViews();
+            updateFccBanner(outages);
+            safely("ReportModal.refresh (auto-notify)", function () {
+              var ReportModal = ns("ReportModal");
+              if (ReportModal) ReportModal.refresh(outages);
+            });
+          }
+
+          if (
+            typeof window !== "undefined" &&
+            window.setTimeout &&
+            AUTO_PSAP_ALERT_DELAY_MS > 0
+          ) {
+            window.setTimeout(sendNow, AUTO_PSAP_ALERT_DELAY_MS);
+          } else {
+            sendNow();
+          }
+        });
+      });
     }
 
     // --- Live demo mode ----------------------------------------------------
@@ -636,6 +709,9 @@
       annotateUserMinutes(outages);
       selectedId = null;
       backToId = null;
+      // Demo.start() resets PSAP statuses, so clear our auto-notify memory too
+      // and let the scripted crossing trigger a fresh automatic notification.
+      autoNotifiedPsaps = {};
       safely("DetailPanel.renderEmpty (demo)", function () {
         var DetailPanel = ns("DetailPanel");
         if (DetailPanel) DetailPanel.renderEmpty();
@@ -658,6 +734,9 @@
       annotateUserMinutes(outages);
       selectedId = null;
       backToId = null;
+      // Fresh run of the live view: forget which PSAPs we auto-notified so any
+      // reportable outage is picked up again by the automatic notifier.
+      autoNotifiedPsaps = {};
       safely("DetailPanel.renderEmpty (exit demo)", function () {
         var DetailPanel = ns("DetailPanel");
         if (DetailPanel) DetailPanel.renderEmpty();
@@ -667,6 +746,9 @@
       updateDemoTimeline();
       // Restore the normal live-drift cadence.
       startTimer(TICK_INTERVAL_MS);
+
+      // Re-run the automatic PSAP notifier against the restored live list.
+      autoNotifyReportablePsaps();
     }
 
     safely("wire demo controls", function () {
@@ -787,6 +869,10 @@
     readColumnFilters();
     applyFilter();
 
+    // Auto-send the PSAP alert for anything already over the 900k threshold on
+    // load (no manual step). Subsequent crossings are handled on each tick.
+    autoNotifyReportablePsaps();
+
     // --- Live drift ---------------------------------------------------------
     // A single repeating timer. Each tick produces ONE updated list and every
     // component refresh below reads from that same `outages` reference so the
@@ -868,6 +954,10 @@
 
       // Refresh the FCC reportable banner as outages cross/leave 900k.
       updateFccBanner(outages);
+
+      // Automatically notify the PSAP / 911 authorities for any outage that has
+      // just crossed the 900k threshold — no manual "send" click required.
+      autoNotifyReportablePsaps();
 
       // Keep the FCC details modal current if it happens to be open.
       safely("ReportModal.refresh", function () {

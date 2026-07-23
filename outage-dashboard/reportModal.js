@@ -8,6 +8,11 @@
  * short recommended-actions checklist. While open it can be refreshed on each
  * live-drift tick so the details stay current.
  *
+ * PSAP / 911 notification is AUTOMATIC: once an outage reaches the 900k
+ * threshold the platform (app.js) sends the PSAP alert itself, so each card
+ * shows either "automatically notifying…" or "sent automatically" rather than
+ * a manual "Send PSAP alert" button.
+ *
  * Browser/DOM-only: loaded via a plain <script> tag, attaches its api to
  * `window.ReportModal`, and has no Node dual-mode export footer (never imported
  * by the test runner).
@@ -36,13 +41,10 @@
     notified: "Notified",
   };
 
-  // The most recent outage list rendered into the modal, so the "Send PSAP
-  // alert" action can re-render the modal in place after updating a status.
+  // The most recent outage list rendered into the modal, so the modal can be
+  // re-rendered in place (e.g. on each live-drift tick, or when the automatic
+  // PSAP notification updates a status).
   var lastOutages = [];
-
-  // Optional callback invoked after a PSAP alert is sent, so the host page can
-  // refresh the dashboard (detail panel / table) immediately.
-  var onPsapAlert = null;
 
   /** Resolves the PSAP linked to an outage, or null. */
   function psapForOutage(outage) {
@@ -196,18 +198,21 @@
           // Link to the PSAP status page, pre-filtered to just this outage's
           // PSAP (see psapPage.applyUrlFilter).
           var psapLink = psap
-            ? '<a class="report-psap__link" href="psap.html?v=29&psap=' +
+            ? '<a class="report-psap__link" href="psap.html?v=30&psap=' +
               encodeURIComponent(psap.id) +
               '">View PSAP status \u2192</a>'
             : "";
 
-          // PSAP reporting action row: shows whether the affected 911/PSAP has
-          // been notified, with a one-click "Send PSAP alert" when it has not.
+          // PSAP reporting action row. There is no manual "send" step anymore:
+          // once an outage reaches 900k the platform notifies the linked PSAP /
+          // 911 automatically. So the row shows either "sent automatically"
+          // (once notified) or a brief "automatically notifying…" state while
+          // the automatic hand-off completes.
           var psapRow;
           if (reported) {
             psapRow =
               '<div class="report-card__psap">' +
-              '<span class="report-psap report-psap--sent">\u2713 PSAP alert sent' +
+              '<span class="report-psap report-psap--sent">\u2713 PSAP alert sent automatically' +
               (psap ? " \u2014 " + escapeHtml(psap.name) : "") +
               "</span>" +
               psapLink +
@@ -215,12 +220,9 @@
           } else {
             psapRow =
               '<div class="report-card__psap">' +
-              '<span class="report-psap report-psap--pending">\u26A0 Reached 900k \u2014 not yet reported to PSAP</span>' +
-              (psap
-                ? '<button type="button" class="report-psap__btn" data-send-psap="' +
-                  escapeHtml(psap.id) +
-                  '">Send PSAP alert</button>'
-                : "") +
+              '<span class="report-psap report-psap--auto">\u21BB Reached 900k \u2014 automatically notifying PSAP' +
+              (psap ? " (" + escapeHtml(psap.name) + ")" : "") +
+              "\u2026</span>" +
               psapLink +
               "</div>";
           }
@@ -271,7 +273,9 @@
       '<div class="modal__section-title">Recommended actions</div>' +
       '<ul class="report-actions">' +
       "<li>File / update the FCC NORS report for each outage above.</li>" +
-      "<li>Notify the affected PSAP / 911 authorities in the impacted regions.</li>" +
+      "<li>The affected PSAP / 911 authorities are notified " +
+      "<strong>automatically</strong> when an outage crosses 900k user-minutes " +
+      "\u2014 no manual step required.</li>" +
       "<li>Confirm the Spectrum user count and restoration ETA.</li>" +
       "<li>Update / close the report as each outage is restored.</li>" +
       "</ul>";
@@ -347,37 +351,10 @@
       }
     });
 
-    // "Send PSAP alert": persist the linked PSAP status as "notified", then
-    // re-render the modal (and notify the host page) so the change is visible.
-    el.addEventListener("click", function (evt) {
-      var btn =
-        evt.target && evt.target.closest
-          ? evt.target.closest("[data-send-psap]")
-          : null;
-      if (!btn) return;
-      var psapId = btn.getAttribute("data-send-psap");
-      var PsapData = global.PsapData;
-      if (!psapId || !PsapData || typeof PsapData.setPsapStatus !== "function") {
-        return;
-      }
-      try {
-        // Set the notification dimension only; because these outages are all
-        // at/over 900k user-minutes, the displayed status derives to
-        // "900k · Notified" automatically.
-        PsapData.setPsapStatus(psapId, "notified");
-      } catch (e) {
-        return;
-      }
-      // Re-render the modal from the same list so the card now shows "sent".
-      render(lastOutages);
-      if (typeof onPsapAlert === "function") {
-        try {
-          onPsapAlert(psapId);
-        } catch (e2) {
-          /* never let a host callback break the modal */
-        }
-      }
-    });
+    // NOTE: PSAP notification is fully automatic (handled in app.js once an
+    // outage reaches 900k), so there is no manual "Send PSAP alert" click to
+    // wire here anymore. The modal simply reflects the status the platform
+    // sets, re-rendering itself on each live-drift tick via refresh().
   }
 
   if (doc) {
@@ -394,9 +371,5 @@
     refresh: refresh,
     isOpen: isOpen,
     render: render,
-    /** Registers a callback fired after a PSAP alert is sent from the modal. */
-    setPsapAlertHandler: function (fn) {
-      onPsapAlert = typeof fn === "function" ? fn : null;
-    },
   };
 })(typeof window !== "undefined" ? window : this);
